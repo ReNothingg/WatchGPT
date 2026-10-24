@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case settings, models, usage
+    case settings, models, usage, voice
 }
 
 struct ChatView: View {
@@ -73,7 +73,11 @@ struct ChatView: View {
             case .settings: SettingsView()
             case .models: ModelPickerView()
             case .usage: UsageView()
+            case .voice: VoiceSettingsView()
             }
+        }
+        .fullScreenCover(isPresented: Bindable(store).isVoiceSheetPresented) {
+            RecordView()
         }
         .onChange(of: store.pendingAsk) { _, pending in
             if pending { openDictationFromWidget() }
@@ -86,10 +90,14 @@ struct ChatView: View {
     private func openDictationFromWidget() {
         store.pendingAsk = false
         guard !store.isBusy else { return }
-        // Give the UI a moment to settle after launch, then open dictation.
+        // Give the UI a moment to settle after launch, then start listening.
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            Dictation.present { store.send($0) }
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            if store.usesCloudVoice {
+                store.startVoice()
+            } else {
+                Dictation.present { store.send($0) }
+            }
         }
     }
 }
@@ -141,7 +149,7 @@ private struct MessageRow: View {
         case .user:
             HStack {
                 Spacer(minLength: 24)
-                Text(message.text)
+                Text(MathFormat.prettify(message.text))
                     .font(.footnote)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)

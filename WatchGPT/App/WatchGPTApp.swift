@@ -51,6 +51,7 @@ struct RootView: View {
             if signedIn {
                 WKHaptics.success()
                 Task { await store.refreshMeta(force: true) }
+                Task { if auth.apiKey == nil { _ = try? await auth.obtainAPIKey() } }
             } else {
                 store.signedOut()
             }
@@ -58,6 +59,9 @@ struct RootView: View {
         }
         .task {
             store.publishWidget()
+            if auth.isSignedIn, auth.apiKey == nil, store.usesCloudVoice {
+                Task { _ = try? await auth.obtainAPIKey() }
+            }
             await store.refreshMeta(force: true)
         }
     }

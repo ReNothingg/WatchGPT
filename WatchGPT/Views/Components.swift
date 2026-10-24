@@ -76,7 +76,8 @@ struct ThinkingDots: View {
     }
 }
 
-/// The main mic button. Tap → system dictation → question is sent immediately.
+/// The main mic button. Tap → record → OpenAI speech-to-text → question is sent.
+/// With the "Apple" engine it opens the system dictation instead.
 struct AskButton: View {
     @Environment(ChatStore.self) private var store
     var size: CGFloat = 44
@@ -90,6 +91,14 @@ struct AskButton: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Остановить")
+        } else if store.usesCloudVoice {
+            Button {
+                store.startVoice()
+            } label: {
+                circle(icon: "mic.fill", fill: Theme.accent, iconColor: .black)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Спросить голосом")
         } else {
             TextFieldLink(prompt: Text("Спросите что угодно")) {
                 circle(icon: "mic.fill", fill: Theme.accent, iconColor: .black)
@@ -118,13 +127,14 @@ struct MarkdownText: View {
     let text: String
 
     var body: some View {
+        let pretty = MathFormat.prettify(text)
         if let attributed = try? AttributedString(
-            markdown: text,
+            markdown: pretty,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace, failurePolicy: .returnPartiallyParsedIfPossible)
         ) {
             Text(attributed)
         } else {
-            Text(text)
+            Text(pretty)
         }
     }
 }

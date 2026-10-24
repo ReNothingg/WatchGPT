@@ -36,6 +36,34 @@ final class ChatStore {
     var autoSpeak: Bool { didSet { defaults.set(autoSpeak, forKey: Keys.autoSpeak) } }
     var conciseAnswers: Bool { didSet { defaults.set(conciseAnswers, forKey: Keys.concise) } }
 
+    // Voice input
+    enum VoicePhase: Equatable { case idle, recording, transcribing, failed(String) }
+    let recorder = AudioRecorder()
+    private(set) var voicePhase: VoicePhase = .idle
+    private(set) var lastVoiceLabel: String?
+    var voiceEngine: VoiceEngine {
+        didSet {
+            defaults.set(voiceEngine.rawValue, forKey: Keys.voiceEngine)
+            if voiceEngine == .chatgpt || voiceEngine == .auto { Transcriber.resetChatGPTAvailability() }
+        }
+    }
+    var transcribeModel: TranscribeModel { didSet { defaults.set(transcribeModel.rawValue, forKey: Keys.transcribeModel) } }
+    var voiceLanguage: String { didSet { defaults.set(voiceLanguage, forKey: Keys.voiceLanguage) } }
+    var autoStopOnSilence: Bool {
+        didSet {
+            defaults.set(autoStopOnSilence, forKey: Keys.autoStop)
+            recorder.autoStopOnSilence = autoStopOnSilence
+        }
+    }
+    @ObservationIgnored private var voiceTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingRecording: URL?
+
+    /// Drives the full-screen recorder.
+    var isVoiceSheetPresented: Bool {
+        get { voicePhase != .idle }
+        set { if !newValue { cancelVoice() } }
+    }
+
     private var conversationID = UUID().uuidString
     private var sendTask: Task<Void, Never>?
     private var lastMetaRefresh: Date?
@@ -47,6 +75,10 @@ final class ChatStore {
         static let webSearch = "settings.webSearch"
         static let autoSpeak = "settings.autoSpeak"
         static let concise = "settings.concise"
+        static let voiceEngine = "settings.voiceEngine"
+        static let transcribeModel = "settings.transcribeModel"
+        static let voiceLanguage = "settings.voiceLanguage"
+        static let autoStop = "settings.autoStop"
         static let models = "cache.models"
         static let usage = "cache.usage"
     }
@@ -59,6 +91,11 @@ final class ChatStore {
         webSearch = d.object(forKey: Keys.webSearch) as? Bool ?? true
         autoSpeak = d.object(forKey: Keys.autoSpeak) as? Bool ?? false
         conciseAnswers = d.object(forKey: Keys.concise) as? Bool ?? true
+        voiceEngine = d.string(forKey: Keys.voiceEngine).flatMap(VoiceEngine.init(rawValue:)) ?? .auto
+        transcribeModel = d.string(forKey: Keys.transcribeModel).flatMap(TranscribeModel.init(rawValue:)) ?? .best
+        voiceLanguage = d.string(forKey: Keys.voiceLanguage) ?? "auto"
+        autoStopOnSilence = d.object(forKey: Keys.autoStop) as? Bool ?? true
+        recorder.autoStopOnSilence = autoStopOnSilence
 
         if let data = d.data(forKey: Keys.models),
            let cached = try? JSONDecoder().decode([ModelOption].self, from: data), !cached.isEmpty {
@@ -78,6 +115,91 @@ final class ChatStore {
 
     var lastAnswer: ChatMessage? {
         messages.last { $0.role == .assistant && !$0.isError && !$0.text.isEmpty }
+    }
+
+    // MARK: Voice
+
+    /// Whether the mic button should record with OpenAI speech-to-text (vs. Apple dictation).
+    var usesCloudVoice: Bool { voiceEngine != .apple }
+
+    func startVoice() {
+        guard !isBusy, voicePhase == .idle || isFailedVoice else { return }
+        speaker.stop()
+        pendingRecording = nil
+        voicePhase = .recording
+        recorder.onAutoStop = { [weak self] in self?.finishVoice() }
+        voiceTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.recorder.start()
+                WKInterfaceDevice.current().play(.start)
+            } catch {
+                self.voicePhase = .failed(Self.describe(error))
+                WKInterfaceDevice.current().play(.failure)
+            }
+        }
+    }
+
+    /// Stop recording → transcribe → send.
+    func finishVoice() {
+        guard voicePhase == .recording else { return }
+        guard let url = recorder.stop() else {
+            voicePhase = .failed("Слишком короткая запись. Нажмите и говорите.")
+            return
+        }
+        WKInterfaceDevice.current().play(.click)
+        pendingRecording = url
+        transcribePending()
+    }
+
+    func retryTranscription() {
+        guard pendingRecording != nil else { startVoice(); return }
+        transcribePending()
+    }
+
+    func cancelVoice() {
+        voiceTask?.cancel()
+        voiceTask = nil
+        if recorder.isRecording { recorder.cancel() }
+        pendingRecording = nil
+        voicePhase = .idle
+    }
+
+    /// Text from the Apple dictation fallback on the error screen.
+    func sendFromFallback(_ text: String) {
+        cancelVoice()
+        send(text)
+    }
+
+    private var isFailedVoice: Bool {
+        if case .failed = voicePhase { return true }
+        return false
+    }
+
+    private func transcribePending() {
+        guard let url = pendingRecording else { return }
+        voicePhase = .transcribing
+        voiceTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await Transcriber.transcribe(
+                    fileURL: url,
+                    engine: self.voiceEngine,
+                    model: self.transcribeModel,
+                    language: self.voiceLanguage,
+                    auth: self.auth
+                )
+                guard !Task.isCancelled else { return }
+                self.lastVoiceLabel = result.label
+                self.pendingRecording = nil
+                self.voicePhase = .idle
+                self.send(result.text)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.voicePhase = .failed(Self.describe(error))
+                WKInterfaceDevice.current().play(.failure)
+            }
+        }
     }
 
     // MARK: Sending
@@ -227,6 +349,9 @@ final class ChatStore {
         Always reply in the language of the user's message. \(style) \
         Write plain text that is easy to read on a tiny screen and to read aloud: no tables, no headings, \
         no code blocks unless essential; simple **bold** and short bullet lists are fine. \
+        Math: never use LaTeX. Write formulas inline with Unicode math symbols, superscripts and subscripts, \
+        e.g. x² + 2x − 3 = 0, x₁,₂ = (−b ± √(b² − 4ac))/(2a), ∫₀¹ x² dx = 1/3, ∑, π, ≤, ≠, →, H₂O. \
+        Put each important formula on its own line. \
         Current date and time: \(now). Locale: \(Locale.current.identifier).
         """
     }

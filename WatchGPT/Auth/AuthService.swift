@@ -18,9 +18,18 @@ final class AuthService {
     }
 
     private static let keychainAccount = "chatgpt.tokens"
+    private static let apiKeyAccount = "openai.apikey"
+
+    struct StoredAPIKey: Codable, Equatable {
+        var key: String
+        var isManual: Bool
+    }
 
     private(set) var phase: Phase
     private(set) var tokens: AuthTokens?
+    /// OpenAI API key for speech-to-text: obtained automatically from the ChatGPT login, or entered by hand.
+    private(set) var apiKey: StoredAPIKey?
+    private(set) var apiKeyError: String?
 
     private var pairingTask: Task<Void, Never>?
     private var refreshTask: Task<AuthTokens, Error>?
@@ -31,6 +40,46 @@ final class AuthService {
         let stored = Keychain.load(AuthTokens.self, account: Self.keychainAccount)
         tokens = stored
         phase = stored == nil ? .signedOut : .signedIn
+        apiKey = Keychain.load(StoredAPIKey.self, account: Self.apiKeyAccount)
+    }
+
+    // MARK: OpenAI API key (speech-to-text)
+
+    /// Returns the stored key, or tries to obtain one from the ChatGPT login.
+    func ensureAPIKey() async throws -> String {
+        if let apiKey { return apiKey.key }
+        return try await obtainAPIKey()
+    }
+
+    @discardableResult
+    func obtainAPIKey() async throws -> String {
+        let current = try await validTokens()
+        do {
+            let key = try await OAuth.obtainAPIKey(idToken: current.idToken)
+            setAPIKey(StoredAPIKey(key: key, isManual: false))
+            apiKeyError = nil
+            return key
+        } catch {
+            apiKeyError = "Не удалось получить API-ключ автоматически. Можно ввести свой ключ вручную."
+            throw error
+        }
+    }
+
+    func setManualAPIKey(_ raw: String) {
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        setAPIKey(StoredAPIKey(key: key, isManual: true))
+        apiKeyError = nil
+    }
+
+    func clearAPIKey() {
+        apiKey = nil
+        Keychain.delete(account: Self.apiKeyAccount)
+    }
+
+    private func setAPIKey(_ value: StoredAPIKey) {
+        apiKey = value
+        Keychain.save(value, account: Self.apiKeyAccount)
     }
 
     // MARK: Pairing
@@ -66,6 +115,7 @@ final class AuthService {
         refreshTask = nil
         tokens = nil
         Keychain.delete(account: Self.keychainAccount)
+        if apiKey?.isManual == false { clearAPIKey() }
         phase = .signedOut
     }
 

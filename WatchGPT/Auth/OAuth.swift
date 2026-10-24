@@ -152,6 +152,29 @@ enum OAuth {
         return updated
     }
 
+    // MARK: OpenAI API key
+
+    /// Exchanges the ChatGPT id_token for an OpenAI API key (same as `codex login` does).
+    /// Used for OpenAI speech-to-text (gpt-4o-transcribe). Fails if the account has no API organization.
+    static func obtainAPIKey(idToken: String) async throws -> String {
+        var request = URLRequest(url: issuer.appending(path: "oauth/token"))
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = formEncode([
+            ("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange"),
+            ("client_id", clientID),
+            ("requested_token", "openai-api-key"),
+            ("subject_token", idToken),
+            ("subject_token_type", "urn:ietf:params:oauth:token-type:id_token"),
+        ])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw Failure.http(status, String(decoding: data, as: UTF8.self)) }
+        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = obj["access_token"] as? String, !key.isEmpty else { throw Failure.badResponse }
+        return key
+    }
+
     // MARK: Helpers
 
     private static func postJSON(_ url: URL, _ body: [String: String]) async throws -> (Data, URLResponse) {

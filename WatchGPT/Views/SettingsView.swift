@@ -29,6 +29,17 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink(value: Route.voice) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Голос")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(store.voiceEngine == .apple ? "Диктовка Apple" : "OpenAI · \(store.transcribeModel.title.lowercased())")
+                    }
+                }
+            }
+
+            Section {
                 Toggle("Поиск в сети", isOn: $store.webSearch)
                 Toggle("Короткие ответы", isOn: $store.conciseAnswers)
                 Toggle("Читать вслух", isOn: $store.autoSpeak)
@@ -207,6 +218,97 @@ private struct WindowGauge: View {
             Text(window.shortLabel)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct VoiceSettingsView: View {
+    @Environment(ChatStore.self) private var store
+    @Environment(AuthService.self) private var auth
+    @State private var fetchingKey = false
+
+    var body: some View {
+        @Bindable var store = store
+
+        List {
+            Section {
+                Picker("Распознавание", selection: $store.voiceEngine) {
+                    ForEach(VoiceEngine.allCases, id: \.self) { engine in
+                        Text(engine.title).tag(engine)
+                    }
+                }
+                if store.voiceEngine != .apple {
+                    Picker("Модель", selection: $store.transcribeModel) {
+                        ForEach(TranscribeModel.allCases, id: \.self) { model in
+                            Text(model.title).tag(model)
+                        }
+                    }
+                    Picker("Язык", selection: $store.voiceLanguage) {
+                        ForEach(Transcriber.languages, id: \.code) { lang in
+                            Text(lang.name).tag(lang.code)
+                        }
+                    }
+                    Toggle("Автостоп по паузе", isOn: $store.autoStopOnSilence)
+                }
+            } footer: {
+                Text(footer)
+            }
+
+            if store.voiceEngine == .auto || store.voiceEngine == .openai {
+                Section {
+                    HStack {
+                        Text("API-ключ")
+                        Spacer()
+                        Text(keyStatus)
+                            .foregroundStyle(auth.apiKey == nil ? .orange : Theme.accent)
+                    }
+                    .font(.footnote)
+
+                    Button {
+                        Task {
+                            fetchingKey = true
+                            _ = try? await auth.obtainAPIKey()
+                            fetchingKey = false
+                        }
+                    } label: {
+                        if fetchingKey { ProgressView() } else { Label("Получить из аккаунта", systemImage: "key") }
+                    }
+                    .disabled(fetchingKey)
+
+                    TextFieldLink(prompt: Text("sk-…")) {
+                        Label("Ввести свой ключ", systemImage: "keyboard")
+                    } onSubmit: { key in
+                        auth.setManualAPIKey(key)
+                    }
+
+                    if auth.apiKey != nil {
+                        Button(role: .destructive) {
+                            auth.clearAPIKey()
+                        } label: {
+                            Label("Удалить ключ", systemImage: "trash")
+                        }
+                    }
+                } header: {
+                    Text("OpenAI")
+                } footer: {
+                    Text(auth.apiKeyError ?? "Ключ берётся из вашего входа в ChatGPT. Распознавание оплачивается с API-баланса OpenAI: около $0.006 за минуту (быстрая модель — вдвое дешевле).")
+                }
+            }
+        }
+        .navigationTitle("Голос")
+    }
+
+    private var keyStatus: String {
+        guard let key = auth.apiKey else { return "нет" }
+        return key.isManual ? "свой" : "из аккаунта"
+    }
+
+    private var footer: String {
+        switch store.voiceEngine {
+        case .auto: return "Сначала диктовка ChatGPT по подписке, если она недоступна — OpenAI gpt-4o-transcribe. Понимает любые языки и формулы."
+        case .chatgpt: return "Диктовка ChatGPT по подписке. Неофициально: может не работать."
+        case .openai: return "OpenAI gpt-4o-transcribe: любые языки, формулы записываются символами (x², √, ∫)."
+        case .apple: return "Встроенная диктовка watchOS: бесплатно и офлайн, но хуже с формулами и смешанными языками."
         }
     }
 }

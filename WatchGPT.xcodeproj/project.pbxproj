@@ -13,6 +13,7 @@
 		129D48B103465D0A33CE75D1 /* WatchGPTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 49F36837B4E53BAAD0A5BB42 /* WatchGPTWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1BFED33092980D9CB29A4E00 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BE7550457E9C3C44327FB2 /* SharedModels.swift */; };
 		1FB96D7A01727E4B626314AD /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C9C6E115012AD1A9E6BB68 /* ChatModels.swift */; };
+		1FDC136DB8A01E9D4618C7A7 /* MathFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68B0B96675C5305620AC8BD0 /* MathFormat.swift */; };
 		29FC6DC358AFBD887286C277 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BE7550457E9C3C44327FB2 /* SharedModels.swift */; };
 		5021DEDAAE280E3ADB8B0DE0 /* Speaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD4CB45C3CC31D512A6F75DD /* Speaker.swift */; };
 		5267D89DA87F8300DBA942E6 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19B334EEB454E1D4B469D02 /* SettingsView.swift */; };
@@ -24,11 +25,14 @@
 		ADFD3610F2074339E2F7F517 /* Dictation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE51DBDDA13349CC02222952 /* Dictation.swift */; };
 		B60C7F69B8FAC56865CE8C42 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44ABD7AB089EE540B1B74190 /* Theme.swift */; };
 		BDA1D48A63A77F87933F9B95 /* WatchGPTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEF414E91D31787E93F3570 /* WatchGPTApp.swift */; };
+		BDAA8F86E18C05D4B4895757 /* RecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD88E2C682B68B006F0AEAA8 /* RecordView.swift */; };
 		C4FE1C6F126315B35078A7A7 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B6BBE8F88BFFE5F19C97188 /* AuthService.swift */; };
 		D83DD68F93CE64286710C57A /* ChatGPTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */; };
+		DDAC50715972EAB421759B4A /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA3FA1FC4E806F6D63CAF99 /* Transcriber.swift */; };
 		DE6647CEA4726231F7FEDED7 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44ABD7AB089EE540B1B74190 /* Theme.swift */; };
 		E5F0A837AA0703ACC742D9D8 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47C0EBA7939F1AD765106C25 /* ChatView.swift */; };
 		F9156B0BE10B8A97B6A59815 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 82FECC0B63A41BCA479439C3 /* Assets.xcassets */; };
+		FB1FB03505CBA10B7F9E902B /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AE555938B2E477948ECCBE /* AudioRecorder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +61,8 @@
 
 /* Begin PBXFileReference section */
 		1E21E16B89543DAD45E44305 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		1FA3FA1FC4E806F6D63CAF99 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
+		23AE555938B2E477948ECCBE /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		2C6470A349E101E02193BC28 /* QRCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCode.swift; sourceTree = "<group>"; };
 		3B6BBE8F88BFFE5F19C97188 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		436F7D8C73FD27CCC94BA067 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -68,6 +74,7 @@
 		5EF63B64BE7D6AD6F68E2CF0 /* OAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuth.swift; sourceTree = "<group>"; };
 		5F864EA057EA60633EE8481E /* WatchGPT.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchGPT.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTClient.swift; sourceTree = "<group>"; };
+		68B0B96675C5305620AC8BD0 /* MathFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathFormat.swift; sourceTree = "<group>"; };
 		6E35406A0C9AACEC81F45B0A /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		6FEF414E91D31787E93F3570 /* WatchGPTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchGPTApp.swift; sourceTree = "<group>"; };
 		6FFCB548C1F63055E7030258 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
@@ -77,6 +84,7 @@
 		A19B334EEB454E1D4B469D02 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AE51DBDDA13349CC02222952 /* Dictation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dictation.swift; sourceTree = "<group>"; };
 		BD4CB45C3CC31D512A6F75DD /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
+		BD88E2C682B68B006F0AEAA8 /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
 		D1ABCAB5D10C01E09738A53E /* WatchGPTWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchGPTWidget.swift; sourceTree = "<group>"; };
 		D62AAF18566800FF16CF3D3F /* WatchGPT.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WatchGPT.entitlements; sourceTree = "<group>"; };
 		DDCA45F67E8745C6A38E06D3 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
@@ -117,6 +125,7 @@
 				62049A30EEECFCADECCAD939 /* Store */,
 				C93512DBBD1E7875AC5DA152 /* Support */,
 				82B1D3A3339116F3DC9D5DDF /* Views */,
+				B1DF639870E0E012E081AA37 /* Voice */,
 			);
 			path = WatchGPT;
 			sourceTree = "<group>";
@@ -143,9 +152,19 @@
 				47C0EBA7939F1AD765106C25 /* ChatView.swift */,
 				6E35406A0C9AACEC81F45B0A /* Components.swift */,
 				6FFCB548C1F63055E7030258 /* PairingView.swift */,
+				BD88E2C682B68B006F0AEAA8 /* RecordView.swift */,
 				A19B334EEB454E1D4B469D02 /* SettingsView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		B1DF639870E0E012E081AA37 /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				23AE555938B2E477948ECCBE /* AudioRecorder.swift */,
+				1FA3FA1FC4E806F6D63CAF99 /* Transcriber.swift */,
+			);
+			path = Voice;
 			sourceTree = "<group>";
 		};
 		C809EDFC8EA48899AA45A337 /* Products */ = {
@@ -161,6 +180,7 @@
 			isa = PBXGroup;
 			children = (
 				AE51DBDDA13349CC02222952 /* Dictation.swift */,
+				68B0B96675C5305620AC8BD0 /* MathFormat.swift */,
 				2C6470A349E101E02193BC28 /* QRCode.swift */,
 				BD4CB45C3CC31D512A6F75DD /* Speaker.swift */,
 			);
@@ -300,6 +320,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FB1FB03505CBA10B7F9E902B /* AudioRecorder.swift in Sources */,
 				C4FE1C6F126315B35078A7A7 /* AuthService.swift in Sources */,
 				7B972C9AE12252468D7DB5FD /* AuthTokens.swift in Sources */,
 				D83DD68F93CE64286710C57A /* ChatGPTClient.swift in Sources */,
@@ -309,13 +330,16 @@
 				0F3B1507B92564ACC88D35D7 /* Components.swift in Sources */,
 				ADFD3610F2074339E2F7F517 /* Dictation.swift in Sources */,
 				5F6F8BEC1F5BF71993E76856 /* Keychain.swift in Sources */,
+				1FDC136DB8A01E9D4618C7A7 /* MathFormat.swift in Sources */,
 				92A2A06CDAA8FE5A42C21CA0 /* OAuth.swift in Sources */,
 				0349AE85BDED53E50925F9E2 /* PairingView.swift in Sources */,
 				7E790F41F9537B8B0C3344BC /* QRCode.swift in Sources */,
+				BDAA8F86E18C05D4B4895757 /* RecordView.swift in Sources */,
 				5267D89DA87F8300DBA942E6 /* SettingsView.swift in Sources */,
 				1BFED33092980D9CB29A4E00 /* SharedModels.swift in Sources */,
 				5021DEDAAE280E3ADB8B0DE0 /* Speaker.swift in Sources */,
 				B60C7F69B8FAC56865CE8C42 /* Theme.swift in Sources */,
+				DDAC50715972EAB421759B4A /* Transcriber.swift in Sources */,
 				BDA1D48A63A77F87933F9B95 /* WatchGPTApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

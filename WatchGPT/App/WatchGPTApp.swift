@@ -20,9 +20,13 @@ struct WatchGPTApp: App {
                 .environment(store)
                 .tint(Theme.accent)
                 .onOpenURL { store.handle(url: $0) }
+                .onReceive(NotificationCenter.default.publisher(for: .watchGPTAskRequested)) { _ in
+                    if AskRequest.consume() { store.pendingAsk = true }
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                if AskRequest.consume() { store.pendingAsk = true }
                 Task { await store.refreshMeta() }
             } else if phase == .background {
                 store.publishWidget()
@@ -58,6 +62,7 @@ struct RootView: View {
             store.publishWidget()
         }
         .task {
+            if AskRequest.consume() { store.pendingAsk = true }
             store.publishWidget()
             if auth.isSignedIn, auth.apiKey == nil, store.usesCloudVoice {
                 Task { _ = try? await auth.obtainAPIKey() }

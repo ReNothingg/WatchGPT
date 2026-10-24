@@ -43,6 +43,7 @@ struct ChatGPTClient: Sendable {
         var effort: String?
         var webSearch: Bool
         var verbosity: String?
+        var fast: Bool = false
         var instructions: String
         var conversationID: String
     }
@@ -170,6 +171,9 @@ struct ChatGPTClient: Sendable {
         if let verbosity = options.verbosity {
             body["text"] = ["verbosity": verbosity]
         }
+        if options.fast {
+            body["service_tier"] = "priority"
+        }
         return body
     }
 
@@ -249,6 +253,8 @@ struct ChatGPTClient: Sendable {
             guard let slug = m["slug"] as? String else { return nil }
             if let visibility = m["visibility"] as? String, visibility != "list" { return nil }
             let levels = (m["supported_reasoning_levels"] as? [[String: Any]])?.compactMap { $0["effort"] as? String } ?? []
+            let tiers = (m["service_tiers"] as? [[String: Any]])?.compactMap { $0["id"] as? String } ?? []
+            let speeds = (m["additional_speed_tiers"] as? [String]) ?? []
             return ModelOption(
                 slug: slug,
                 displayName: (m["display_name"] as? String) ?? slug,
@@ -256,7 +262,8 @@ struct ChatGPTClient: Sendable {
                 efforts: levels,
                 defaultEffort: m["default_reasoning_level"] as? String,
                 supportsVerbosity: (m["support_verbosity"] as? Bool) ?? false,
-                priority: (m["priority"] as? Int) ?? 100
+                priority: (m["priority"] as? Int) ?? 100,
+                supportsFast: tiers.contains("priority") || tiers.contains("fast") || speeds.contains("fast")
             )
         }
         .sorted { $0.priority < $1.priority }

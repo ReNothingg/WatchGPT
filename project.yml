@@ -47,6 +47,7 @@ targets:
         WKWatchOnly: true
         AppGroupID: $(APP_GROUP)
         NSMicrophoneUsageDescription: Микрофон нужен, чтобы вы могли задавать вопросы голосом.
+        WKBackgroundModes: [audio]
         CFBundleURLTypes:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
             CFBundleURLSchemes: [watchgpt]

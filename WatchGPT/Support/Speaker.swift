@@ -57,7 +57,7 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
 
     /// Strips markdown and links so the voice doesn't read symbols.
     static func plain(_ text: String) -> String {
-        var s = text
+        var s = MathFormat.plain(text)
         s = s.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
         s = s.replacingOccurrences(of: #"https?://\S+"#, with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: #"[*_`#>]+"#, with: "", options: .regularExpression)

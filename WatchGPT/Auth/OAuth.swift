@@ -20,14 +20,17 @@ enum OAuth {
         case expired
         case http(Int, String)
         case badResponse
+        case noAPIOrganization
 
         var errorDescription: String? {
             switch self {
             case .deviceCodeDisabled:
                 return "Вход по коду недоступен. Включите «Device code» для Codex в настройках безопасности ChatGPT."
             case .expired: return "Код истёк. Попробуйте снова."
-            case let .http(code, body): return "Ошибка входа (\(code)). \(body.prefix(120))"
+            case let .http(code, body): return "Ошибка входа (\(code)). \(OAuth.readableMessage(body).prefix(160))"
             case .badResponse: return "Неожиданный ответ сервера."
+            case .noAPIOrganization:
+                return "У аккаунта нет API-организации OpenAI, поэтому ключ не выдаётся автоматически. Создайте её на platform.openai.com или введите свой ключ."
             }
         }
     }
@@ -169,10 +172,23 @@ enum OAuth {
         ])
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { throw Failure.http(status, String(decoding: data, as: UTF8.self)) }
+        guard (200..<300).contains(status) else {
+            let body = String(decoding: data, as: UTF8.self)
+            if body.contains("organization_id") { throw Failure.noAPIOrganization }
+            throw Failure.http(status, body)
+        }
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let key = obj["access_token"] as? String, !key.isEmpty else { throw Failure.badResponse }
         return key
+    }
+
+    static func readableMessage(_ body: String) -> String {
+        guard let obj = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any] else { return body }
+        if let error = obj["error"] as? [String: Any], let message = error["message"] as? String { return message }
+        if let message = obj["error_description"] as? String { return message }
+        if let message = obj["error"] as? String { return message }
+        if let message = obj["detail"] as? String { return message }
+        return body
     }
 
     // MARK: Helpers

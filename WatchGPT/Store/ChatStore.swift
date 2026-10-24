@@ -12,9 +12,11 @@ final class ChatStore {
     let speaker = Speaker()
 
     private(set) var messages: [ChatMessage] = []
+    private(set) var chats: [ChatThread] = []
     private(set) var status: Status = .idle
     private(set) var usage: UsageSnapshot?
     private(set) var models: [ModelOption] = ModelOption.fallback
+    @ObservationIgnored private var effortOverrides: [String: [String]] = [:]
     private(set) var usageError: String?
 
     /// Set by the widget deep link — the chat screen opens dictation right away.
@@ -35,6 +37,7 @@ final class ChatStore {
     var webSearch: Bool { didSet { defaults.set(webSearch, forKey: Keys.webSearch) } }
     var autoSpeak: Bool { didSet { defaults.set(autoSpeak, forKey: Keys.autoSpeak) } }
     var conciseAnswers: Bool { didSet { defaults.set(conciseAnswers, forKey: Keys.concise) } }
+    var fastMode: Bool { didSet { defaults.set(fastMode, forKey: Keys.fast) } }
 
     // Voice input
     enum VoicePhase: Equatable { case idle, recording, transcribing, failed(String) }
@@ -49,12 +52,6 @@ final class ChatStore {
     }
     var transcribeModel: TranscribeModel { didSet { defaults.set(transcribeModel.rawValue, forKey: Keys.transcribeModel) } }
     var voiceLanguage: String { didSet { defaults.set(voiceLanguage, forKey: Keys.voiceLanguage) } }
-    var autoStopOnSilence: Bool {
-        didSet {
-            defaults.set(autoStopOnSilence, forKey: Keys.autoStop)
-            recorder.autoStopOnSilence = autoStopOnSilence
-        }
-    }
     @ObservationIgnored private var voiceTask: Task<Void, Never>?
     @ObservationIgnored private var pendingRecording: URL?
 
@@ -64,7 +61,7 @@ final class ChatStore {
         set { if !newValue { cancelVoice() } }
     }
 
-    private var conversationID = UUID().uuidString
+    private(set) var conversationID = UUID().uuidString
     private var sendTask: Task<Void, Never>?
     private var lastMetaRefresh: Date?
     private let defaults = UserDefaults.standard
@@ -75,11 +72,12 @@ final class ChatStore {
         static let webSearch = "settings.webSearch"
         static let autoSpeak = "settings.autoSpeak"
         static let concise = "settings.concise"
+        static let fast = "settings.fast"
         static let voiceEngine = "settings.voiceEngine"
         static let transcribeModel = "settings.transcribeModel"
         static let voiceLanguage = "settings.voiceLanguage"
-        static let autoStop = "settings.autoStop"
         static let models = "cache.models"
+        static let effortOverrides = "cache.effortOverrides"
         static let usage = "cache.usage"
     }
 
@@ -91,15 +89,20 @@ final class ChatStore {
         webSearch = d.object(forKey: Keys.webSearch) as? Bool ?? true
         autoSpeak = d.object(forKey: Keys.autoSpeak) as? Bool ?? false
         conciseAnswers = d.object(forKey: Keys.concise) as? Bool ?? true
+        fastMode = d.object(forKey: Keys.fast) as? Bool ?? false
         voiceEngine = d.string(forKey: Keys.voiceEngine).flatMap(VoiceEngine.init(rawValue:)) ?? .auto
         transcribeModel = d.string(forKey: Keys.transcribeModel).flatMap(TranscribeModel.init(rawValue:)) ?? .best
         voiceLanguage = d.string(forKey: Keys.voiceLanguage) ?? "auto"
-        autoStopOnSilence = d.object(forKey: Keys.autoStop) as? Bool ?? true
-        recorder.autoStopOnSilence = autoStopOnSilence
+        Transcriber.resetChatGPTAvailability()
 
+        effortOverrides = (d.dictionary(forKey: Keys.effortOverrides) as? [String: [String]]) ?? [:]
         if let data = d.data(forKey: Keys.models),
            let cached = try? JSONDecoder().decode([ModelOption].self, from: data), !cached.isEmpty {
             models = cached
+        }
+        models = applyEffortOverrides(models)
+        if !selectedModel.efforts.isEmpty, !selectedModel.efforts.contains(effort) {
+            effort = selectedModel.defaultEffort ?? selectedModel.efforts.first ?? "low"
         }
         if let data = d.data(forKey: Keys.usage) {
             usage = try? JSONDecoder().decode(UsageSnapshot.self, from: data)
@@ -127,7 +130,6 @@ final class ChatStore {
         speaker.stop()
         pendingRecording = nil
         voicePhase = .recording
-        recorder.onAutoStop = { [weak self] in self?.finishVoice() }
         voiceTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -137,6 +139,22 @@ final class ChatStore {
                 self.voicePhase = .failed(Self.describe(error))
                 WKInterfaceDevice.current().play(.failure)
             }
+        }
+    }
+
+    func toggleVoicePause() {
+        guard voicePhase == .recording else { return }
+        if recorder.isPaused {
+            do {
+                try recorder.resume()
+                WKInterfaceDevice.current().play(.start)
+            } catch {
+                voicePhase = .failed(Self.describe(error))
+                WKInterfaceDevice.current().play(.failure)
+            }
+        } else if recorder.isRecording {
+            recorder.pause()
+            WKInterfaceDevice.current().play(.stop)
         }
     }
 
@@ -160,7 +178,7 @@ final class ChatStore {
     func cancelVoice() {
         voiceTask?.cancel()
         voiceTask = nil
-        if recorder.isRecording { recorder.cancel() }
+        if recorder.isActive { recorder.cancel() }
         pendingRecording = nil
         voicePhase = .idle
     }
@@ -238,19 +256,57 @@ final class ChatStore {
     func newChat() {
         stop()
         speaker.stop()
+        saveConversation()
         messages = []
         conversationID = UUID().uuidString
         scrollTarget = nil
+        publishWidget()
+    }
+
+    func openChat(_ id: String) {
+        guard let chat = chats.first(where: { $0.id == id }) else { return }
+        guard id != conversationID || messages.isEmpty else { return }
+        stop()
+        speaker.stop()
         saveConversation()
+        conversationID = chat.id
+        messages = chat.messages
+        scrollTarget = messages.last(where: { $0.role == .user })?.id
+        publishWidget()
+    }
+
+    func deleteChat(_ id: String) {
+        if id == conversationID {
+            stop()
+            speaker.stop()
+            messages = []
+            conversationID = UUID().uuidString
+            scrollTarget = nil
+        }
+        chats.removeAll { $0.id == id }
+        writeChats()
+        publishWidget()
+    }
+
+    func deleteAllChats() {
+        stop()
+        speaker.stop()
+        messages = []
+        conversationID = UUID().uuidString
+        scrollTarget = nil
+        chats = []
+        writeChats()
         publishWidget()
     }
 
     private func generate(replyID: UUID) async {
         var didRetryAuth = false
+        var didFixEffort = false
+        let chatID = conversationID
         defer {
             status = .idle
             sendTask = nil
-            saveConversation()
+            if conversationID == chatID { saveConversation() }
             publishWidget()
         }
 
@@ -261,18 +317,35 @@ final class ChatStore {
                 let history = messages.filter { $0.id != replyID }
                 let stream = client.stream(messages: history, options: requestOptions())
 
-                for try await event in stream {
-                    switch event {
-                    case let .textDelta(delta):
-                        status = .streaming
-                        update(replyID) { $0.text += delta }
-                    case .searching:
-                        if status != .streaming { status = .searching }
-                    case let .usage(snapshot):
-                        applyUsage(snapshot)
-                    case .completed:
-                        break
+                var pending = ""
+                var lastFlush = ContinuousClock.now - .seconds(1)
+                func flush() {
+                    guard !pending.isEmpty else { return }
+                    let chunk = pending
+                    pending = ""
+                    lastFlush = .now
+                    update(replyID) { $0.text += chunk }
+                }
+
+                do {
+                    for try await event in stream {
+                        switch event {
+                        case let .textDelta(delta):
+                            if status != .streaming { status = .streaming }
+                            pending += delta
+                            if ContinuousClock.now - lastFlush >= .milliseconds(120) { flush() }
+                        case .searching:
+                            if status != .streaming && status != .searching { status = .searching }
+                        case let .usage(snapshot):
+                            applyUsage(snapshot)
+                        case .completed:
+                            break
+                        }
                     }
+                    flush()
+                } catch {
+                    flush()
+                    throw error
                 }
 
                 if text(of: replyID).isEmpty {
@@ -283,6 +356,9 @@ final class ChatStore {
                     if autoSpeak { speaker.speak(text(of: replyID)) }
                 }
                 return
+            } catch where !didFixEffort && text(of: replyID).isEmpty && fixUnsupportedEffort(error) {
+                didFixEffort = true
+                continue
             } catch ChatGPTClient.APIError.unauthorized where !didRetryAuth {
                 didRetryAuth = true
                 do { try await auth.refresh() } catch { fail(replyID, error); return }
@@ -333,6 +409,7 @@ final class ChatStore {
             effort: effortValue,
             webSearch: webSearch,
             verbosity: model.supportsVerbosity ? (conciseAnswers ? "low" : "medium") : nil,
+            fast: fastMode && model.supportsFast == true,
             instructions: instructions(),
             conversationID: conversationID
         )
@@ -349,9 +426,10 @@ final class ChatStore {
         Always reply in the language of the user's message. \(style) \
         Write plain text that is easy to read on a tiny screen and to read aloud: no tables, no headings, \
         no code blocks unless essential; simple **bold** and short bullet lists are fine. \
-        Math: never use LaTeX. Write formulas inline with Unicode math symbols, superscripts and subscripts, \
-        e.g. x² + 2x − 3 = 0, x₁,₂ = (−b ± √(b² − 4ac))/(2a), ∫₀¹ x² dx = 1/3, ∑, π, ≤, ≠, →, H₂O. \
-        Put each important formula on its own line. \
+        Math: write formulas in LaTeX. Short inline math goes in \\( … \\); every important formula goes \
+        on its own line in \\[ … \\]. The screen is about 180 points wide, so keep each displayed formula short: \
+        split long derivations into several \\[ … \\] lines, avoid wide matrices, never put formulas in code blocks. \
+        Simple chemistry like H₂O can stay as plain text. \
         Current date and time: \(now). Locale: \(Locale.current.identifier).
         """
     }
@@ -402,11 +480,62 @@ final class ChatStore {
         guard let tokens = try? await auth.validTokens(),
               let fetched = try? await ChatGPTClient(tokens: tokens).fetchModels(),
               !fetched.isEmpty else { return }
-        models = fetched
+        models = applyEffortOverrides(fetched)
         if let data = try? JSONEncoder().encode(fetched) { defaults.set(data, forKey: Keys.models) }
         if !fetched.contains(where: { $0.slug == selectedModelSlug }) {
             selectedModelSlug = fetched[0].slug
         }
+    }
+
+    private func applyEffortOverrides(_ list: [ModelOption]) -> [ModelOption] {
+        list.map { model in
+            guard let supported = effortOverrides[model.slug] else { return model }
+            var fixed = model
+            let kept = model.efforts.filter { supported.contains($0) }
+            fixed.efforts = kept.isEmpty ? supported : kept
+            if let current = fixed.defaultEffort, !fixed.efforts.contains(current) {
+                fixed.defaultEffort = fixed.efforts.last { ModelOption.effortRank($0) <= ModelOption.effortRank(current) } ?? fixed.efforts.first
+            }
+            return fixed
+        }
+    }
+
+    private func fixUnsupportedEffort(_ error: Error) -> Bool {
+        let message: String
+        switch error {
+        case let ChatGPTClient.APIError.stream(m): message = m
+        case let ChatGPTClient.APIError.http(_, m): message = m
+        default: return false
+        }
+        guard let parsed = Self.parseUnsupportedValue(message), parsed.invalid == effort else { return false }
+        let model = selectedModel
+        let supported = parsed.supported
+        effortOverrides[model.slug] = supported
+        defaults.set(effortOverrides, forKey: Keys.effortOverrides)
+        models = applyEffortOverrides(models)
+
+        let rank = ModelOption.effortRank(parsed.invalid)
+        let efforts = selectedModel.efforts
+        effort = efforts.last { ModelOption.effortRank($0) < rank } ?? selectedModel.defaultEffort ?? efforts.first ?? "low"
+        return true
+    }
+
+    static func parseUnsupportedValue(_ message: String) -> (invalid: String, supported: [String])? {
+        guard let marker = message.range(of: "Supported values are", options: .caseInsensitive) else { return nil }
+        func quoted(_ s: Substring) -> [String] {
+            var out: [String] = []
+            var rest = s
+            while let open = rest.firstIndex(of: "'") {
+                let after = rest.index(after: open)
+                guard let close = rest[after...].firstIndex(of: "'") else { break }
+                out.append(String(rest[after..<close]))
+                rest = rest[rest.index(after: close)...]
+            }
+            return out
+        }
+        guard let invalid = quoted(message[..<marker.lowerBound]).last else { return nil }
+        let supported = quoted(message[marker.upperBound...])
+        return supported.isEmpty ? nil : (invalid, supported)
     }
 
     private func applyUsage(_ snapshot: UsageSnapshot) {
@@ -419,7 +548,7 @@ final class ChatStore {
     }
 
     func signedOut() {
-        newChat()
+        deleteAllChats()
         usage = nil
         defaults.removeObject(forKey: Keys.usage)
         publishWidget()
@@ -432,7 +561,7 @@ final class ChatStore {
             signedIn: auth.isSignedIn,
             usage: usage,
             modelName: selectedModel.displayName,
-            lastAnswer: lastAnswer.map { String($0.text.prefix(240)) }
+            lastAnswer: lastAnswer.map { String(MathFormat.plain($0.text).prefix(240)) }
         )
         guard snapshot != SharedStore.load() else { return }
         SharedStore.save(snapshot)
@@ -441,31 +570,53 @@ final class ChatStore {
 
     // MARK: Persistence
 
-    private struct SavedConversation: Codable {
+    private static let historyLimit = 60
+
+    private var storeDirectory: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private var chatsURL: URL { storeDirectory.appending(path: "chats.json") }
+    private var legacyConversationURL: URL { storeDirectory.appending(path: "conversation.json") }
+
+    private struct LegacyConversation: Codable {
         var id: String
         var messages: [ChatMessage]
     }
 
-    private var conversationURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appending(path: "conversation.json")
-    }
-
     private func loadConversation() {
-        guard let data = try? Data(contentsOf: conversationURL),
-              let saved = try? JSONDecoder().decode(SavedConversation.self, from: data) else { return }
-        // Start fresh if the last chat is older than 6 hours.
-        if let last = saved.messages.last, Date.now.timeIntervalSince(last.date) > 6 * 3600 { return }
-        conversationID = saved.id
-        messages = saved.messages.filter { !$0.text.isEmpty }
+        if let data = try? Data(contentsOf: chatsURL),
+           let saved = try? JSONDecoder().decode([ChatThread].self, from: data) {
+            chats = saved.sorted { $0.updatedAt > $1.updatedAt }
+        } else if let data = try? Data(contentsOf: legacyConversationURL),
+                  let legacy = try? JSONDecoder().decode(LegacyConversation.self, from: data),
+                  let thread = ChatThread(id: legacy.id, messages: legacy.messages) {
+            chats = [thread]
+            writeChats()
+            try? FileManager.default.removeItem(at: legacyConversationURL)
+        }
+        guard let latest = chats.first, Date.now.timeIntervalSince(latest.updatedAt) <= 6 * 3600 else { return }
+        conversationID = latest.id
+        messages = latest.messages
         scrollTarget = messages.last(where: { $0.role == .user })?.id
     }
 
     private func saveConversation() {
-        let saved = SavedConversation(id: conversationID, messages: messages.filter { !$0.text.isEmpty })
-        if let data = try? JSONEncoder().encode(saved) {
-            try? data.write(to: conversationURL, options: .atomic)
+        let kept = messages.filter { !$0.text.isEmpty }
+        chats.removeAll { $0.id == conversationID }
+        if let thread = ChatThread(id: conversationID, messages: kept) {
+            chats.insert(thread, at: 0)
+            chats.sort { $0.updatedAt > $1.updatedAt }
+            if chats.count > Self.historyLimit { chats.removeLast(chats.count - Self.historyLimit) }
+        }
+        writeChats()
+    }
+
+    private func writeChats() {
+        if let data = try? JSONEncoder().encode(chats) {
+            try? data.write(to: chatsURL, options: .atomic)
         }
     }
 }

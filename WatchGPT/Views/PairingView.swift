@@ -5,32 +5,41 @@ struct PairingView: View {
     @Environment(AuthService.self) private var auth
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 8) {
-                switch auth.phase {
-                case .signedOut, .requestingCode, .signedIn:
-                    ProgressView()
-                        .padding(.top, 30)
+        Group {
+            switch auth.phase {
+            case .signedOut, .requestingCode, .signedIn:
+                VStack(spacing: 8) {
+                    Spinner(size: 30, lineWidth: 3)
                     Text("Готовлю код входа…")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                case let .waiting(code):
-                    WaitingForApproval(code: code)
-
-                case let .failed(message):
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.orange)
-                        .padding(.top, 8)
-                    Text(message)
-                        .font(.footnote)
-                        .multilineTextAlignment(.center)
-                    Button("Попробовать снова") { auth.startPairing() }
-                        .tint(Theme.accent)
+                        .foregroundStyle(Theme.secondaryText)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            case let .waiting(code):
+                ScrollView {
+                    WaitingForApproval(code: code)
+                        .frame(maxWidth: .infinity)
+                }
+                .id(code.deviceAuthID)
+
+            case let .failed(message):
+                ScrollView {
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.orange)
+                            .padding(.top, 8)
+                        Text(message)
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                        Button("Попробовать снова") { auth.startPairing() }
+                            .tint(Theme.accent)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .id(message)
             }
-            .frame(maxWidth: .infinity)
         }
         .navigationTitle("WatchGPT")
         .onAppear {
@@ -44,50 +53,63 @@ private struct WaitingForApproval: View {
     let code: OAuth.DeviceCode
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             QRCodeView(text: code.verificationURL.absoluteString)
-                .frame(width: 128, height: 128)
-
-            Text("Отсканируйте камерой iPhone")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .frame(width: 104, height: 104)
 
             Text(formatted(code.userCode))
-                .font(.system(size: 22, weight: .semibold, design: .monospaced))
+                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                .tracking(1)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
-                .padding(.top, 4)
+                .padding(.top, 9)
 
-            Text("Войдите в ChatGPT и введите этот код")
+            Text("Сканируйте iPhone и введите код")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
+                .padding(.top, 2)
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let left = max(0, Int(code.expiresAt.timeIntervalSince(context.date)))
-                HStack(spacing: 4) {
-                    ProgressView().controlSize(.mini)
-                    Text("Жду подтверждения · \(left / 60):\(String(format: "%02d", left % 60))")
+                HStack(spacing: 5) {
+                    Spinner(size: 10, lineWidth: 1.5)
+                    Text("Жду входа · \(left / 60):\(String(format: "%02d", left % 60))")
                         .monospacedDigit()
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryText)
             }
-            .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Или откройте вручную:")
-                Text(code.verificationURL.absoluteString.replacingOccurrences(of: "https://", with: ""))
-                    .foregroundStyle(Theme.accent)
-            }
-            .font(.caption2)
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 6)
 
-            Button("Новый код") { auth.startPairing() }
-                .font(.footnote)
-                .padding(.top, 4)
+            VStack(spacing: 2) {
+                Text("Или откройте вручную")
+                    .foregroundStyle(Theme.secondaryText)
+                Text(code.verificationURL.absoluteString.replacingOccurrences(of: "https://", with: ""))
+                    .foregroundStyle(Theme.accent)
+                    .multilineTextAlignment(.center)
+            }
+            .font(.caption2)
+            .padding(.top, 18)
+
+            Button {
+                auth.startPairing()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Новый код")
+                        .font(.caption.weight(.medium))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .background(Capsule().fill(Theme.surface))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
         }
     }
 
@@ -122,7 +144,7 @@ struct QRCodeView: View {
             context.fill(path, with: .color(.black))
         }
         .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityLabel("QR-код для входа")
     }
 }

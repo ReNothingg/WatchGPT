@@ -1,79 +1,90 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case settings, models, usage, voice
+    case settings, models, usage, voice, history
 }
 
 struct ChatView: View {
     @Environment(ChatStore.self) private var store
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                if store.messages.isEmpty {
-                    HomeView()
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(store.messages) { message in
-                            MessageRow(message: message, isLast: message.id == store.messages.last?.id)
-                                .id(message.id)
+        Group {
+            if store.messages.isEmpty {
+                HomeView()
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(store.messages) { message in
+                                MessageRow(message: message, isLast: message.id == store.messages.last?.id)
+                                    .equatable()
+                                    .id(message.id)
+                                    .transition(message.role == .user ? .userBubble : .reply)
+                            }
                         }
+                        .padding(.bottom, 56)
+                        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: store.messages.map(\.id))
                     }
-                    .padding(.bottom, 8)
+                    .onChange(of: store.scrollTarget) { _, target in
+                        guard let target else { return }
+                        withAnimation { proxy.scrollTo(target, anchor: .top) }
+                    }
+                    .onAppear {
+                        if let target = store.scrollTarget { proxy.scrollTo(target, anchor: .top) }
+                    }
                 }
-            }
-            .onChange(of: store.scrollTarget) { _, target in
-                guard let target else { return }
-                withAnimation { proxy.scrollTo(target, anchor: .top) }
-            }
-            .onAppear {
-                if let target = store.scrollTarget { proxy.scrollTo(target, anchor: .top) }
+                .transition(.opacity)
             }
         }
+        .animation(.smooth(duration: 0.4), value: store.messages.isEmpty)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 NavigationLink(value: Route.usage) {
-                    UsageRing(remaining: store.usage?.tightest()?.remainingPercent())
-                        .frame(width: 26, height: 26)
+                    UsageRing(remaining: store.usage?.tightest()?.remainingPercent(), lineWidth: 2.5, showsText: false)
+                        .frame(width: 17, height: 17)
                 }
                 .accessibilityLabel("Лимиты")
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink(value: Route.settings) {
-                    Image(systemName: "slider.horizontal.3")
-                }
-                .accessibilityLabel("Настройки")
-            }
             if !store.messages.isEmpty {
-                ToolbarItemGroup(placement: .bottomBar) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        WKHaptics.click()
                         store.newChat()
                     } label: {
-                        Image(systemName: "square.and.pencil")
+                        Image(systemName: "plus")
+                            .foregroundStyle(.white)
                     }
                     .disabled(store.isBusy)
                     .accessibilityLabel("Новый чат")
-
-                    Spacer()
-                    AskButton(size: 44)
-                    Spacer()
-
-                    Button {
-                        if let answer = store.lastAnswer { store.speaker.toggle(answer.text) }
-                    } label: {
-                        Image(systemName: store.speaker.isSpeaking ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    NavigationLink(value: Route.history) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .foregroundStyle(.white)
                     }
-                    .disabled(store.lastAnswer == nil)
-                    .accessibilityLabel("Озвучить ответ")
+                    .accessibilityLabel("История")
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    AskButton(size: 46)
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    NavigationLink(value: Route.settings) {
+                        Image(systemName: "gearshape")
+                            .foregroundStyle(.white)
+                    }
+                    .accessibilityLabel("Настройки")
                 }
             }
         }
+        .tint(Theme.control)
         .navigationDestination(for: Route.self) { route in
             switch route {
             case .settings: SettingsView()
             case .models: ModelPickerView()
             case .usage: UsageView()
             case .voice: VoiceSettingsView()
+            case .history: HistoryView()
             }
         }
         .fullScreenCover(isPresented: Bindable(store).isVoiceSheetPresented) {
@@ -104,75 +115,144 @@ struct ChatView: View {
 
 /// Empty state: one big button. Tap → speak → answer.
 private struct HomeView: View {
-    @Environment(ChatStore.self) private var store
+    @State private var appeared = false
 
     var body: some View {
-        VStack(spacing: 10) {
-            AskButton(size: 86)
-                .padding(.top, 4)
-
-            Text("Спросить")
-                .font(.headline)
-
-            NavigationLink(value: Route.models) {
-                HStack(spacing: 4) {
-                    Image(systemName: "sparkle")
-                    Text(store.selectedModel.displayName)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
+        GeometryReader { geo in
+            let side: CGFloat = 34
+            let gap: CGFloat = 10
+            let mic = min(84, max(56, geo.size.height - 82), geo.size.width - 2 * (side + gap) - 8)
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                HStack(spacing: gap) {
+                    HomeSideButton(icon: "clock.arrow.circlepath", route: .history, label: "История", size: side)
+                        .offset(x: appeared ? 0 : 24)
+                        .opacity(appeared ? 1 : 0)
+                    AskButton(size: mic, halo: true)
+                        .scaleEffect(appeared ? 1 : 0.4)
+                        .opacity(appeared ? 1 : 0)
+                    HomeSideButton(icon: "gearshape", route: .settings, label: "Настройки", size: side)
+                        .offset(x: appeared ? 0 : -24)
+                        .opacity(appeared ? 1 : 0)
                 }
-                .font(.caption2)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(Theme.chip))
+                Spacer(minLength: 8)
+                ModelCard(crownControlsEffort: true)
+                    .offset(y: appeared ? 0 : 30)
+                    .opacity(appeared ? 1 : 0)
             }
-            .buttonStyle(.plain)
-
-            NavigationLink(value: Route.usage) {
-                UsageLine(usage: store.usage)
-            }
-            .buttonStyle(.plain)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
-        .frame(maxWidth: .infinity)
+        .onAppear {
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) { appeared = true }
+        }
     }
 }
 
-private struct MessageRow: View {
+private struct HomeSideButton: View {
+    let icon: String
+    let route: Route
+    let label: String
+    let size: CGFloat
+
+    var body: some View {
+        NavigationLink(value: route) {
+            Image(systemName: icon)
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(Circle().fill(Theme.raised))
+                .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel(label)
+    }
+}
+
+private extension AnyTransition {
+    static var userBubble: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 0.6, anchor: .bottomTrailing)
+                .combined(with: .opacity)
+                .combined(with: .offset(y: 14)),
+            removal: .opacity
+        )
+    }
+
+    static var reply: AnyTransition {
+        .asymmetric(
+            insertion: .opacity.combined(with: .offset(y: 10)),
+            removal: .opacity
+        )
+    }
+}
+
+private struct MessageRow: View, Equatable {
     @Environment(ChatStore.self) private var store
     let message: ChatMessage
     let isLast: Bool
 
+    static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
+        lhs.isLast == rhs.isLast && lhs.message == rhs.message
+    }
+
     var body: some View {
+        content
+            .animation(.easeOut(duration: 0.3), value: message.text.isEmpty)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch message.role {
         case .user:
             HStack {
-                Spacer(minLength: 24)
-                Text(MathFormat.prettify(message.text))
-                    .font(.footnote)
+                Spacer(minLength: 28)
+                MarkdownText(text: message.text, style: .footnote)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.bubble))
             }
         case .assistant:
             if message.isError {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Label(message.text, systemImage: "exclamationmark.triangle.fill")
                         .font(.footnote)
                         .foregroundStyle(.orange)
                     if isLast {
-                        Button("Повторить") { store.retry() }
-                            .font(.footnote)
+                        Button {
+                            store.retry()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Повторить")
+                                    .font(.caption2.weight(.medium))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .frame(height: 28)
+                            .background(Capsule().fill(Theme.surface))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(store.isBusy)
                     }
                 }
             } else if message.text.isEmpty && isLast && store.isBusy {
-                ThinkingDots(label: store.status == .searching ? "Ищу в интернете" : "Думаю")
+                let searching = store.status == .searching
+                ThinkingIndicator(label: searching ? "Ищу в интернете" : "Думаю", searching: searching)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
             } else {
-                MarkdownText(text: message.text)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onTapGesture(count: 2) { store.speaker.toggle(message.text) }
+                VStack(alignment: .leading, spacing: 4) {
+                    MarkdownText(text: message.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .onTapGesture(count: 2) { store.speaker.toggle(message.text) }
+                    if isLast && store.status == .streaming {
+                        StreamingDot()
+                            .transition(.opacity.combined(with: .scale))
+                    }
+                }
+                .transition(.opacity.combined(with: .offset(y: 6)))
+                .animation(.easeOut(duration: 0.25), value: isLast && store.status == .streaming)
             }
         }
     }

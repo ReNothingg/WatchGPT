@@ -46,6 +46,8 @@ enum Transcriber {
         case badKey
         case http(Int, String)
         case unavailable
+        case chatgpt(Int)
+        case noEngine(String)
 
         var errorDescription: String? {
             switch self {
@@ -54,6 +56,8 @@ enum Transcriber {
             case .badKey: return "API-ключ OpenAI не подошёл. Получите новый в настройках."
             case let .http(code, message): return message.isEmpty ? "Ошибка распознавания (\(code))." : message
             case .unavailable: return "Распознавание ChatGPT недоступно."
+            case let .chatgpt(code): return "Диктовка ChatGPT не сработала (\(code)). Попробуйте ещё раз или выберите Apple-диктовку."
+            case let .noEngine(reason): return "Не получилось распознать речь. \(reason)"
             }
         }
     }
@@ -87,22 +91,34 @@ enum Transcriber {
 
         switch engine {
         case .chatgpt:
-            return try await viaChatGPT(audio, auth: auth)
+            return try await viaChatGPT(audio, language: language, auth: auth)
         case .openai:
             return try await viaOpenAI(audio, model: model, language: language, auth: auth)
         case .auto, .apple:
-            // ChatGPT dictation is free with the subscription, but unofficial: skip it for a day after it fails.
+            let hasKey = auth.apiKey != nil
             let blockedUntil = UserDefaults.standard.object(forKey: chatgptBlockedKey) as? Date ?? .distantPast
-            if blockedUntil < .now {
+            var chatgptError: Error?
+            if !hasKey || blockedUntil < .now {
                 do {
-                    return try await viaChatGPT(audio, auth: auth)
+                    return try await viaChatGPT(audio, language: language, auth: auth)
                 } catch let error as URLError {
                     throw error
                 } catch {
-                    UserDefaults.standard.set(Date.now.addingTimeInterval(24 * 3600), forKey: chatgptBlockedKey)
+                    chatgptError = error
+                    if hasKey { UserDefaults.standard.set(Date.now.addingTimeInterval(15 * 60), forKey: chatgptBlockedKey) }
                 }
             }
-            return try await viaOpenAI(audio, model: model, language: language, auth: auth)
+            do {
+                return try await viaOpenAI(audio, model: model, language: language, auth: auth)
+            } catch let error as URLError {
+                throw error
+            } catch OAuth.Failure.noAPIOrganization {
+                let reason = chatgptError?.localizedDescription ?? "Диктовка ChatGPT не ответила."
+                throw TranscribeError.noEngine("\(reason) Запасной вариант через OpenAI API недоступен: у аккаунта нет API-организации.")
+            } catch {
+                if let chatgptError, !hasKey { throw chatgptError }
+                throw error
+            }
         }
     }
 
@@ -112,30 +128,44 @@ enum Transcriber {
 
     // MARK: ChatGPT dictation (subscription)
 
+    static let desktopOriginator = "Codex Desktop"
+    static let desktopVersion = "26.429.30905"
+
     @MainActor
-    private static func viaChatGPT(_ audio: Data, auth: AuthService) async throws -> Result {
-        let tokens = try await auth.validTokens()
-        var form = MultipartForm()
-        form.addFile(name: "file", filename: "dictation.m4a", mimeType: "audio/mp4", data: audio)
+    private static func viaChatGPT(_ audio: Data, language: String, auth: AuthService) async throws -> Result {
+        var tokens = try await auth.validTokens()
+        var refreshed = false
 
-        var request = URLRequest(url: ChatGPTClient.baseURL.appending(path: "transcribe"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 60
-        request.setValue("Bearer \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
-        if let account = tokens.accountID { request.setValue(account, forHTTPHeaderField: "ChatGPT-Account-Id") }
-        request.setValue("codex_cli_rs", forHTTPHeaderField: "originator")
-        request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
+        while true {
+            var form = MultipartForm()
+            form.addFile(name: "file", filename: "dictation.m4a", mimeType: "audio/mp4", data: audio)
+            if language != "auto" { form.addField(name: "language", value: language) }
 
-        let (data, response) = try await URLSession.shared.upload(for: request, from: form.finalize())
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let text = obj["text"] as? String else {
-            throw TranscribeError.unavailable
+            var request = URLRequest(url: ChatGPTClient.baseURL.appending(path: "transcribe"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 60
+            request.setValue("Bearer \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
+            if let account = tokens.accountID { request.setValue(account, forHTTPHeaderField: "ChatGPT-Account-Id") }
+            request.setValue(desktopOriginator, forHTTPHeaderField: "originator")
+            request.setValue("\(desktopOriginator)/\(desktopVersion) (watchOS; arm64)", forHTTPHeaderField: "User-Agent")
+            request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
+
+            let (data, response) = try await URLSession.shared.upload(for: request, from: form.finalize())
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 401, !refreshed {
+                tokens = try await auth.refresh()
+                refreshed = true
+                continue
+            }
+            guard (200..<300).contains(status) else { throw TranscribeError.chatgpt(status) }
+            guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let text = obj["text"] as? String else {
+                throw TranscribeError.unavailable
+            }
+            let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty else { throw TranscribeError.empty }
+            return Result(text: clean, engine: .chatgpt, label: "ChatGPT")
         }
-        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { throw TranscribeError.empty }
-        return Result(text: clean, engine: .chatgpt, label: "ChatGPT")
     }
 
     // MARK: OpenAI speech-to-text

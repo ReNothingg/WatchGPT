@@ -12,6 +12,8 @@
 		0F3B1507B92564ACC88D35D7 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E35406A0C9AACEC81F45B0A /* Components.swift */; };
 		129D48B103465D0A33CE75D1 /* WatchGPTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 49F36837B4E53BAAD0A5BB42 /* WatchGPTWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1BFED33092980D9CB29A4E00 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BE7550457E9C3C44327FB2 /* SharedModels.swift */; };
+		A1C0DE000000000000000002 /* AskIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000000001 /* AskIntent.swift */; };
+		A1C0DE000000000000000003 /* AskIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000000001 /* AskIntent.swift */; };
 		1FB96D7A01727E4B626314AD /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C9C6E115012AD1A9E6BB68 /* ChatModels.swift */; };
 		1FDC136DB8A01E9D4618C7A7 /* MathFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68B0B96675C5305620AC8BD0 /* MathFormat.swift */; };
 		29FC6DC358AFBD887286C277 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BE7550457E9C3C44327FB2 /* SharedModels.swift */; };
@@ -30,6 +32,8 @@
 		D83DD68F93CE64286710C57A /* ChatGPTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */; };
 		DDAC50715972EAB421759B4A /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA3FA1FC4E806F6D63CAF99 /* Transcriber.swift */; };
 		DE6647CEA4726231F7FEDED7 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44ABD7AB089EE540B1B74190 /* Theme.swift */; };
+		C7A1D0E2B4F6A8C0D2E4F601 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A1D0E2B4F6A8C0D2E4F602 /* HistoryView.swift */; };
+		C7A1D0E2B4F6A8C0D2E4F603 /* VoiceOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A1D0E2B4F6A8C0D2E4F604 /* VoiceOrb.swift */; };
 		E5F0A837AA0703ACC742D9D8 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47C0EBA7939F1AD765106C25 /* ChatView.swift */; };
 		F9156B0BE10B8A97B6A59815 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 82FECC0B63A41BCA479439C3 /* Assets.xcassets */; };
 		FB1FB03505CBA10B7F9E902B /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AE555938B2E477948ECCBE /* AudioRecorder.swift */; };
@@ -67,9 +71,12 @@
 		3B6BBE8F88BFFE5F19C97188 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		436F7D8C73FD27CCC94BA067 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		44ABD7AB089EE540B1B74190 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		C7A1D0E2B4F6A8C0D2E4F602 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		C7A1D0E2B4F6A8C0D2E4F604 /* VoiceOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceOrb.swift; sourceTree = "<group>"; };
 		47C0EBA7939F1AD765106C25 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		49C9C6E115012AD1A9E6BB68 /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
 		49F36837B4E53BAAD0A5BB42 /* WatchGPTWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WatchGPTWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1C0DE000000000000000001 /* AskIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskIntent.swift; sourceTree = "<group>"; };
 		50BE7550457E9C3C44327FB2 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
 		5EF63B64BE7D6AD6F68E2CF0 /* OAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuth.swift; sourceTree = "<group>"; };
 		5F864EA057EA60633EE8481E /* WatchGPT.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchGPT.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -150,6 +157,8 @@
 			isa = PBXGroup;
 			children = (
 				47C0EBA7939F1AD765106C25 /* ChatView.swift */,
+				C7A1D0E2B4F6A8C0D2E4F604 /* VoiceOrb.swift */,
+				C7A1D0E2B4F6A8C0D2E4F602 /* HistoryView.swift */,
 				6E35406A0C9AACEC81F45B0A /* Components.swift */,
 				6FFCB548C1F63055E7030258 /* PairingView.swift */,
 				BD88E2C682B68B006F0AEAA8 /* RecordView.swift */,
@@ -209,6 +218,7 @@
 		FF5C4CCCCFB9CD0CAACB1102 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				A1C0DE000000000000000001 /* AskIntent.swift */,
 				50BE7550457E9C3C44327FB2 /* SharedModels.swift */,
 				44ABD7AB089EE540B1B74190 /* Theme.swift */,
 			);
@@ -310,6 +320,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1C0DE000000000000000002 /* AskIntent.swift in Sources */,
 				29FC6DC358AFBD887286C277 /* SharedModels.swift in Sources */,
 				DE6647CEA4726231F7FEDED7 /* Theme.swift in Sources */,
 				028EA899E7225C291B7D15AF /* WatchGPTWidget.swift in Sources */,
@@ -327,6 +338,8 @@
 				1FB96D7A01727E4B626314AD /* ChatModels.swift in Sources */,
 				7B04D98C502A3B920C457762 /* ChatStore.swift in Sources */,
 				E5F0A837AA0703ACC742D9D8 /* ChatView.swift in Sources */,
+				C7A1D0E2B4F6A8C0D2E4F603 /* VoiceOrb.swift in Sources */,
+				C7A1D0E2B4F6A8C0D2E4F601 /* HistoryView.swift in Sources */,
 				0F3B1507B92564ACC88D35D7 /* Components.swift in Sources */,
 				ADFD3610F2074339E2F7F517 /* Dictation.swift in Sources */,
 				5F6F8BEC1F5BF71993E76856 /* Keychain.swift in Sources */,
@@ -336,6 +349,7 @@
 				7E790F41F9537B8B0C3344BC /* QRCode.swift in Sources */,
 				BDAA8F86E18C05D4B4895757 /* RecordView.swift in Sources */,
 				5267D89DA87F8300DBA942E6 /* SettingsView.swift in Sources */,
+				A1C0DE000000000000000003 /* AskIntent.swift in Sources */,
 				1BFED33092980D9CB29A4E00 /* SharedModels.swift in Sources */,
 				5021DEDAAE280E3ADB8B0DE0 /* Speaker.swift in Sources */,
 				B60C7F69B8FAC56865CE8C42 /* Theme.swift in Sources */,
@@ -360,7 +374,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				APP_GROUP = "group.$(BUNDLE_ID_BASE)";
-				BUNDLE_ID_BASE = com.example.watchgpt;
+				BUNDLE_ID_BASE = com.pashasobolev.watchgpt;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -394,7 +408,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = A7AA4W5KXR;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -448,7 +462,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				APP_GROUP = "group.$(BUNDLE_ID_BASE)";
-				BUNDLE_ID_BASE = com.example.watchgpt;
+				BUNDLE_ID_BASE = com.pashasobolev.watchgpt;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -482,7 +496,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = A7AA4W5KXR;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

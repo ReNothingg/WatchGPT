@@ -59,6 +59,9 @@ final class AuthService {
             setAPIKey(StoredAPIKey(key: key, isManual: false))
             apiKeyError = nil
             return key
+        } catch OAuth.Failure.noAPIOrganization {
+            apiKeyError = OAuth.Failure.noAPIOrganization.errorDescription
+            throw OAuth.Failure.noAPIOrganization
         } catch {
             apiKeyError = "Не удалось получить API-ключ автоматически. Можно ввести свой ключ вручную."
             throw error

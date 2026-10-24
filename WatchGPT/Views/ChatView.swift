@@ -59,21 +59,7 @@ struct ChatView: View {
                     .accessibilityLabel("Новый чат")
                 }
                 ToolbarItem(placement: .bottomBar) {
-                    NavigationLink(value: Route.history) {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .foregroundStyle(.white)
-                    }
-                    .accessibilityLabel("История")
-                }
-                ToolbarItem(placement: .bottomBar) {
                     AskButton(size: 46)
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    NavigationLink(value: Route.settings) {
-                        Image(systemName: "gearshape")
-                            .foregroundStyle(.white)
-                    }
-                    .accessibilityLabel("Настройки")
                 }
             }
         }

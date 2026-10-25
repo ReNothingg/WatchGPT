@@ -35,6 +35,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон нужен, чтобы вы могли задавать вопросы голосом.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>watchgpt.chat</string>
+	</array>
 	<key>WKBackgroundModes</key>
 	<array>
 		<string>audio</string>

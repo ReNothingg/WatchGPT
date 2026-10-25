@@ -9,9 +9,9 @@ struct VoiceBlob: View {
     @State private var engine = BlobEngine()
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+        LiveTimeline(role: .feedback) { date in
             Canvas { ctx, size in
-                engine.step(to: context.date, level: level, mode: mode)
+                engine.step(to: date, level: level, mode: mode)
                 BlobPainter(state: engine, coreRatio: coreRatio).draw(in: &ctx, size: size)
             }
         }
@@ -237,9 +237,9 @@ struct EdgeGlow: View {
     @State private var engine = GlowEngine()
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+        LiveTimeline(role: .feedback) { date in
             Canvas { ctx, size in
-                engine.step(to: context.date, level: level, mode: mode)
+                engine.step(to: date, level: level, mode: mode)
                 GlowPainter(state: engine).draw(in: &ctx, size: size)
             }
         }

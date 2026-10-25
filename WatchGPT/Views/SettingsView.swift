@@ -44,6 +44,7 @@ struct SettingsView: View {
                     }
                     ToggleTile(title: "Кратко", icon: "text.alignleft", isOn: $store.conciseAnswers)
                     ToggleTile(title: "Вслух", icon: "speaker.wave.2.fill", isOn: $store.autoSpeak)
+                    ToggleTile(title: "На iPhone", icon: "iphone.and.arrow.forward", isOn: $store.handoff)
                 }
 
                 SettingsCard {
@@ -61,6 +62,19 @@ struct SettingsView: View {
                                 Text(Theme.percent(left))
                                     .fontWeight(.semibold)
                                     .foregroundStyle(Theme.usageColor(left))
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    CardDivider()
+                    NavigationLink(value: Route.diagnostics) {
+                        SettingsRow(title: "Диагностика") {
+                            let count = DiagnosticsLog.shared.entries.filter { $0.date.timeIntervalSinceNow > -86_400 }.count
+                            if count > 0 {
+                                Text("\(count)")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.orange)
                                     .monospacedDigit()
                             }
                         }

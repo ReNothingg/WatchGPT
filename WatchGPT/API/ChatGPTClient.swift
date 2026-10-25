@@ -32,6 +32,8 @@ struct ChatGPTClient: Sendable {
     }
 
     enum StreamEvent: Sendable {
+        case waitingForNetwork
+        case responseStarted
         case textDelta(String)
         case searching
         case usage(UsageSnapshot)
@@ -77,8 +79,10 @@ struct ChatGPTClient: Sendable {
         request.httpBody = try JSONSerialization.data(withJSONObject: Self.body(messages: messages, options: options))
         request.timeoutInterval = 180
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let delegate = ConnectivityDelegate { continuation.yield(.waitingForNetwork) }
+        let (bytes, response) = try await Self.streamSession.bytes(for: request, delegate: delegate)
         guard let http = response as? HTTPURLResponse else { throw APIError.stream("Нет ответа от сервера.") }
+        continuation.yield(.responseStarted)
 
         if let usage = Self.usage(fromHeaders: http) {
             continuation.yield(.usage(usage))
@@ -149,7 +153,7 @@ struct ChatGPTClient: Sendable {
             input.append([
                 "type": "message",
                 "role": isUser ? "user" : "assistant",
-                "content": [["type": isUser ? "input_text" : "output_text", "text": message.text]],
+                "content": [["type": isUser ? "input_text" : "output_text", "text": message.modelText]],
             ])
         }
         if let context = options.context, !context.isEmpty {
@@ -279,7 +283,26 @@ struct ChatGPTClient: Sendable {
 
     // MARK: Helpers
 
-    private func makeRequest(_ url: URL, method: String) -> URLRequest {
+    static let streamSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.waitsForConnectivity = true
+        config.timeoutIntervalForResource = 3600
+        return URLSession(configuration: config)
+    }()
+
+    private final class ConnectivityDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+        let onWaiting: @Sendable () -> Void
+
+        init(onWaiting: @escaping @Sendable () -> Void) {
+            self.onWaiting = onWaiting
+        }
+
+        func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
+            onWaiting()
+        }
+    }
+
+    func makeRequest(_ url: URL, method: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
@@ -291,7 +314,7 @@ struct ChatGPTClient: Sendable {
         return request
     }
 
-    private static func number(_ any: Any?) -> Double? {
+    static func number(_ any: Any?) -> Double? {
         switch any {
         case let n as NSNumber: return n.doubleValue
         case let s as String: return Double(s)
@@ -302,11 +325,7 @@ struct ChatGPTClient: Sendable {
     static func error(status: Int, body: Data, response: HTTPURLResponse? = nil) -> APIError {
         if status == 401 { return .unauthorized }
 
-        let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
-        let error = obj?["error"] as? [String: Any]
-        let detail = obj?["detail"] as? [String: Any]
-        let type = (error?["type"] as? String) ?? (error?["code"] as? String) ?? (detail?["code"] as? String) ?? ""
-        let message = (error?["message"] as? String) ?? (obj?["detail"] as? String) ?? (detail?["message"] as? String) ?? ""
+        let (obj, error, type, message) = errorDetails(body)
 
         if status == 403 {
             return forbidden(obj: obj, type: type, message: message, body: body, response: response)
@@ -330,6 +349,34 @@ struct ChatGPTClient: Sendable {
         body: Data,
         response: HTTPURLResponse?
     ) -> APIError {
+        if let blocked = networkBlock(obj: obj, type: type, message: message, body: body, response: response) {
+            return blocked
+        }
+        let reason = message.isEmpty ? (type.isEmpty ? "без пояснений" : type) : message
+        return .http(403, "Аккаунт: доступ запрещён (403) — \(reason). Проверьте подписку или войдите заново.")
+    }
+
+    static func networkBlock(body: Data, response: HTTPURLResponse?) -> APIError? {
+        let (obj, _, type, message) = errorDetails(body)
+        return networkBlock(obj: obj, type: type, message: message, body: body, response: response)
+    }
+
+    private static func errorDetails(_ body: Data) -> (obj: [String: Any]?, error: [String: Any]?, type: String, message: String) {
+        let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        let error = obj?["error"] as? [String: Any]
+        let detail = obj?["detail"] as? [String: Any]
+        let type = (error?["type"] as? String) ?? (error?["code"] as? String) ?? (detail?["code"] as? String) ?? ""
+        let message = (error?["message"] as? String) ?? (obj?["detail"] as? String) ?? (detail?["message"] as? String) ?? ""
+        return (obj, error, type, message)
+    }
+
+    private static func networkBlock(
+        obj: [String: Any]?,
+        type: String,
+        message: String,
+        body: Data,
+        response: HTTPURLResponse?
+    ) -> APIError? {
         let contentType = response?.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
         let text = String(decoding: body.prefix(4096), as: UTF8.self).lowercased()
         let ray = response?.value(forHTTPHeaderField: "cf-ray").map { " Ray \($0)." } ?? ""
@@ -348,8 +395,6 @@ struct ChatGPTClient: Sendable {
         if ["unsupported_country", "country", "region", "territory"].contains(where: hint.contains) {
             return .http(403, "OpenAI не обслуживает ваш регион (403). Нужен DNS или VPN с поддерживаемой страной.")
         }
-
-        let reason = message.isEmpty ? (type.isEmpty ? "без пояснений" : type) : message
-        return .http(403, "Аккаунт: доступ запрещён (403) — \(reason). Проверьте подписку или войдите заново.")
+        return nil
     }
 }

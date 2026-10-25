@@ -89,8 +89,8 @@ struct ShimmerText: View {
     var period: Double = 1.6
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-            let p = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+        LiveTimeline(role: .status) { date in
+            let p = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
             let x = -0.6 + p * 2.2
             Text(text)
                 .font(font)
@@ -115,8 +115,8 @@ struct PulseOrb: View {
     var color: Color = Theme.accent
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
+        LiveTimeline(role: .status) { date in
+            let t = date.timeIntervalSinceReferenceDate
             let beat = 0.5 + 0.5 * sin(t * 4.2)
             ZStack {
                 Circle()
@@ -235,7 +235,7 @@ struct AskButton: View {
     }
 }
 
-private struct MicCircle: View {
+struct MicCircle: View {
     let size: CGFloat
     let halo: Bool
 
@@ -266,8 +266,8 @@ private struct HaloRings: View {
     let size: CGFloat
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
+        LiveTimeline(role: .decorative, idleAfter: .seconds(8)) { date in
+            let t = date.timeIntervalSinceReferenceDate
             ZStack {
                 ForEach(0..<2, id: \.self) { k in
                     let p = (t / 2.6 + Double(k) * 0.5).truncatingRemainder(dividingBy: 1)
@@ -289,8 +289,8 @@ private struct BusyCircle: View {
     var body: some View {
         ZStack {
             Circle().fill(Theme.raised)
-            TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
+            LiveTimeline(role: .status) { date in
+                let t = date.timeIntervalSinceReferenceDate
                 Circle()
                     .trim(from: 0, to: 0.28 + 0.12 * sin(t * 2.4))
                     .stroke(

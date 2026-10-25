@@ -6,10 +6,13 @@ import WidgetKit
 @MainActor
 @Observable
 final class ChatStore {
-    enum Status: Equatable { case idle, thinking, searching, streaming }
+    enum Status: Equatable { case idle, waitingForNetwork, thinking, searching, streaming }
 
     let auth: AuthService
     let speaker = Speaker()
+    let gptHistory: GPTHistory
+
+    var path: [Route] = []
 
     private(set) var messages: [ChatMessage] = []
     private(set) var chats: [ChatThread] = []
@@ -38,6 +41,7 @@ final class ChatStore {
     var autoSpeak: Bool { didSet { defaults.set(autoSpeak, forKey: Keys.autoSpeak) } }
     var conciseAnswers: Bool { didSet { defaults.set(conciseAnswers, forKey: Keys.concise) } }
     var fastMode: Bool { didSet { defaults.set(fastMode, forKey: Keys.fast) } }
+    var handoff: Bool { didSet { defaults.set(handoff, forKey: Handoff.defaultsKey) } }
 
     // Voice input
     enum VoicePhase: Equatable { case idle, recording, transcribing, failed(String) }
@@ -69,6 +73,7 @@ final class ChatStore {
     @ObservationIgnored private var resumeOnActive = false
     @ObservationIgnored private var didAutoResume = false
     @ObservationIgnored private var lastStreamActivity = Date.now
+    @ObservationIgnored private var siriRequest = false
     private var lastMetaRefresh: Date?
     private let defaults = UserDefaults.standard
 
@@ -90,6 +95,7 @@ final class ChatStore {
 
     init(auth: AuthService) {
         self.auth = auth
+        gptHistory = GPTHistory(auth: auth)
         let d = UserDefaults.standard
         selectedModelSlug = d.string(forKey: Keys.model) ?? ModelOption.fallback[0].slug
         effort = d.string(forKey: Keys.effort) ?? "low"
@@ -97,6 +103,7 @@ final class ChatStore {
         autoSpeak = d.object(forKey: Keys.autoSpeak) as? Bool ?? false
         conciseAnswers = d.object(forKey: Keys.concise) as? Bool ?? true
         fastMode = d.object(forKey: Keys.fast) as? Bool ?? false
+        handoff = d.object(forKey: Handoff.defaultsKey) as? Bool ?? true
         voiceEngine = d.string(forKey: Keys.voiceEngine).flatMap(VoiceEngine.init(rawValue:)) ?? .auto
         transcribeModel = d.string(forKey: Keys.transcribeModel).flatMap(TranscribeModel.init(rawValue:)) ?? .best
         voiceLanguage = d.string(forKey: Keys.voiceLanguage) ?? "auto"
@@ -144,6 +151,7 @@ final class ChatStore {
                 try await self.recorder.start(whisper: self.whisperMode)
                 WKInterfaceDevice.current().play(.start)
             } catch {
+                DiagnosticsLog.shared.record(.voice, error)
                 self.voicePhase = .failed(Self.describe(error))
                 WKInterfaceDevice.current().play(.failure)
             }
@@ -229,6 +237,7 @@ final class ChatStore {
                 self.send(result.text)
             } catch {
                 guard !Task.isCancelled else { return }
+                DiagnosticsLog.shared.record(.voice, error)
                 self.voicePhase = .failed(Self.describe(error))
                 WKInterfaceDevice.current().play(.failure)
             }
@@ -242,7 +251,38 @@ final class ChatStore {
         submit(raw)
     }
 
-    private func submit(_ raw: String) {
+    func askFromSiri(_ raw: String) async throws -> String {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw SiriAskError.empty }
+        guard auth.isSignedIn else { throw SiriAskError.signedOut }
+        guard !isBusy, voicePhase == .idle else { throw SiriAskError.busy }
+
+        newChat()
+        siriRequest = true
+        didAutoResume = true
+        defer { siriRequest = false }
+        submit(text)
+        let task = sendTask
+        await task?.value
+
+        guard let reply = messages.last, reply.role == .assistant, !reply.text.isEmpty else {
+            throw SiriAskError.failed("Ответ не получен. Попробуйте ещё раз.")
+        }
+        if reply.isError { throw SiriAskError.failed(reply.text) }
+        return reply.text
+    }
+
+    func refine(_ kind: ChatMessage.Refinement) {
+        guard lastAnswer != nil, messages.last?.isError != true else { return }
+        didAutoResume = false
+        submit(kind.label, refine: kind)
+    }
+
+    var canRefine: Bool {
+        !isBusy && messages.last.map { $0.role == .assistant && !$0.isError && !$0.text.isEmpty } == true
+    }
+
+    private func submit(_ raw: String, refine: ChatMessage.Refinement? = nil) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isBusy else { return }
         speaker.stop()
@@ -250,7 +290,7 @@ final class ChatStore {
         resumeOnActive = false
         lastStreamActivity = .now
 
-        let question = ChatMessage(role: .user, text: text)
+        let question = ChatMessage(role: .user, text: text, refine: refine)
         let reply = ChatMessage(role: .assistant, text: "")
         messages.append(question)
         messages.append(reply)
@@ -271,9 +311,9 @@ final class ChatStore {
 
     private func resend() {
         guard !isBusy, let lastUser = messages.lastIndex(where: { $0.role == .user }) else { return }
-        let text = messages[lastUser].text
+        let question = messages[lastUser]
         messages.removeSubrange(lastUser...)
-        submit(text)
+        submit(question.text, refine: question.refine)
     }
 
     func stop() {
@@ -296,8 +336,8 @@ final class ChatStore {
                   Date.now.timeIntervalSince(lastStreamActivity) > 15 else { return }
             resumeOnActive = true
             sendTask?.cancel()
-        } else if resumeOnActive {
-            resumeInterrupted()
+        } else {
+            resumePendingIfNeeded()
         }
     }
 
@@ -334,6 +374,29 @@ final class ChatStore {
         messages = chat.messages
         scrollTarget = messages.last(where: { $0.role == .user })?.id
         publishWidget()
+    }
+
+    func hasLocalCopy(ofGPTChat id: String) -> Bool {
+        let localID = ChatThread.gptID(id)
+        return chats.contains { $0.id == localID }
+    }
+
+    func continueGPTChat(_ conversation: RemoteConversation, ask: Bool) {
+        guard !isBusy else { return }
+        let localID = ChatThread.gptID(conversation.id)
+        let local = localID == conversationID ? messages : chats.first { $0.id == localID }?.messages ?? []
+        let watchOnly = local.filter { $0.fromGPT != true && !$0.isError && !$0.text.isEmpty }
+        let merged = (conversation.messages + watchOnly).sorted { $0.date < $1.date }
+
+        speaker.stop()
+        if conversationID != localID { saveConversation() }
+        conversationID = localID
+        messages = Array(merged.suffix(Self.importLimit))
+        scrollTarget = messages.last(where: { $0.role == .user })?.id
+        saveConversation(title: conversation.title)
+        publishWidget()
+        path = []
+        if ask { pendingAsk = true }
     }
 
     func deleteChat(_ id: String) {
@@ -399,6 +462,11 @@ final class ChatStore {
                     for try await event in stream {
                         lastStreamActivity = .now
                         switch event {
+                        case .waitingForNetwork:
+                            if siriRequest { throw URLError(.notConnectedToInternet) }
+                            if status == .thinking { status = .waitingForNetwork }
+                        case .responseStarted:
+                            if status == .waitingForNetwork { status = .thinking }
                         case let .textDelta(delta):
                             if status != .streaming { status = .streaming }
                             pending += delta
@@ -421,8 +489,9 @@ final class ChatStore {
                     update(replyID) { $0.text = "Пустой ответ. Попробуйте ещё раз."; $0.isError = true }
                     WKInterfaceDevice.current().play(.failure)
                 } else {
+                    DiagnosticsLog.shared.markSuccess()
                     WKInterfaceDevice.current().play(.success)
-                    if autoSpeak { speaker.speak(text(of: replyID)) }
+                    if autoSpeak && !siriRequest { speaker.speak(text(of: replyID)) }
                 }
                 return
             } catch where !didFixEffort && text(of: replyID).isEmpty && fixUnsupportedEffort(error) {
@@ -452,6 +521,7 @@ final class ChatStore {
     }
 
     private func fail(_ replyID: UUID, _ error: Error) {
+        DiagnosticsLog.shared.record(.answer, error)
         let message = Self.describe(error)
         if text(of: replyID).isEmpty {
             update(replyID) { $0.text = message; $0.isError = true }
@@ -477,15 +547,23 @@ final class ChatStore {
 
     private func requestOptions() -> ChatGPTClient.Options {
         let model = selectedModel
-        let effortValue: String? = model.efforts.isEmpty ? nil : (model.efforts.contains(effort) ? effort : model.defaultEffort)
+        var effortValue: String? = model.efforts.isEmpty ? nil : (model.efforts.contains(effort) ? effort : model.defaultEffort)
+        let refine = messages.last { $0.role == .user }?.refine
+        var verbosity = refine?.verbosity ?? (conciseAnswers ? "low" : "medium")
+        var context = "Current date and time: \(Date.now.formatted(date: .complete, time: .shortened))."
+        if siriRequest {
+            effortValue = model.efforts.min { ModelOption.effortRank($0) < ModelOption.effortRank($1) } ?? effortValue
+            verbosity = "low"
+            context += " Siri will read this answer aloud: reply in one to three short spoken sentences, without lists, formulas or markdown."
+        }
         return ChatGPTClient.Options(
             model: model.slug,
             effort: effortValue,
             webSearch: webSearch,
-            verbosity: model.supportsVerbosity ? (conciseAnswers ? "low" : "medium") : nil,
+            verbosity: model.supportsVerbosity ? verbosity : nil,
             fast: fastMode && model.supportsFast == true,
             instructions: instructions(),
-            context: "Current date and time: \(Date.now.formatted(date: .complete, time: .shortened)).",
+            context: context,
             conversationID: conversationID
         )
     }
@@ -547,13 +625,20 @@ final class ChatStore {
             }
         } catch {
             usageError = Self.describe(error)
+            DiagnosticsLog.shared.record(.usage, error)
         }
     }
 
     private func refreshModels() async {
-        guard let tokens = try? await auth.validTokens(),
-              let fetched = try? await ChatGPTClient(tokens: tokens).fetchModels(),
-              !fetched.isEmpty else { return }
+        guard let tokens = try? await auth.validTokens() else { return }
+        let fetched: [ModelOption]
+        do {
+            fetched = try await ChatGPTClient(tokens: tokens).fetchModels()
+        } catch {
+            if !GPTHistory.isCancellation(error) { DiagnosticsLog.shared.record(.models, error) }
+            return
+        }
+        guard !fetched.isEmpty else { return }
         models = applyEffortOverrides(fetched)
         if let data = try? JSONEncoder().encode(fetched) { defaults.set(data, forKey: Keys.models) }
         if !fetched.contains(where: { $0.slug == selectedModelSlug }) {
@@ -624,6 +709,8 @@ final class ChatStore {
 
     func signedOut() {
         deleteAllChats()
+        gptHistory.clear()
+        path = []
         usage = nil
         defaults.removeObject(forKey: Keys.usage)
         LimitReminder.update(for: nil)
@@ -647,6 +734,7 @@ final class ChatStore {
     // MARK: Persistence
 
     private static let historyLimit = 60
+    private static let importLimit = 50
 
     private var storeDirectory: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -677,12 +765,22 @@ final class ChatStore {
         conversationID = latest.id
         messages = latest.messages
         scrollTarget = messages.last(where: { $0.role == .user })?.id
+        if let last = messages.last, last.role == .user, last.fromGPT != true,
+           Date.now.timeIntervalSince(last.date) <= 3600 {
+            resumeOnActive = true
+        }
     }
 
-    private func saveConversation() {
+    func resumePendingIfNeeded() {
+        guard resumeOnActive, !isBusy, !isInBackground, auth.isSignedIn else { return }
+        resumeInterrupted()
+    }
+
+    private func saveConversation(title: String? = nil) {
         let kept = messages.filter { !$0.text.isEmpty }
+        let keptTitle = title ?? chats.first { $0.id == conversationID && $0.isFromGPT }?.title
         chats.removeAll { $0.id == conversationID }
-        if let thread = ChatThread(id: conversationID, messages: kept) {
+        if let thread = ChatThread(id: conversationID, messages: kept, title: keptTitle) {
             chats.insert(thread, at: 0)
             chats.sort { $0.updatedAt > $1.updatedAt }
             if chats.count > Self.historyLimit { chats.removeLast(chats.count - Self.historyLimit) }

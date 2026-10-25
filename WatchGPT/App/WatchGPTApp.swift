@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 import WatchKit
 
@@ -9,8 +10,10 @@ struct WatchGPTApp: App {
 
     init() {
         let auth = AuthService()
+        let store = ChatStore(auth: auth)
         _auth = State(initialValue: auth)
-        _store = State(initialValue: ChatStore(auth: auth))
+        _store = State(initialValue: store)
+        AppDependencyManager.shared.add(dependency: store)
     }
 
     var body: some Scene {
@@ -44,7 +47,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if auth.isSignedIn {
-                NavigationStack {
+                NavigationStack(path: Bindable(store).path) {
                     ChatView()
                 }
             } else {
@@ -66,6 +69,7 @@ struct RootView: View {
         .task {
             if AskRequest.consume() { store.pendingAsk = true }
             store.publishWidget()
+            store.resumePendingIfNeeded()
             if auth.isSignedIn, auth.apiKey == nil, store.usesCloudVoice {
                 Task { _ = try? await auth.obtainAPIKey() }
             }

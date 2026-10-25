@@ -26,6 +26,10 @@
 		A1C0DE000000000000000003 /* AskIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000000001 /* AskIntent.swift */; };
 		B2D1F0A0000000000000A002 /* LimitReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A001 /* LimitReminder.swift */; };
 		B2D1F0A0000000000000A004 /* AppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A003 /* AppShortcuts.swift */; };
+		B2D1F0A0000000000000A006 /* Power.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A005 /* Power.swift */; };
+		B2D1F0A0000000000000A008 /* DiagnosticsLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A007 /* DiagnosticsLog.swift */; };
+		B2D1F0A0000000000000A00A /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A009 /* DiagnosticsView.swift */; };
+		B2D1F0A0000000000000A00C /* Handoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A00B /* Handoff.swift */; };
 		ADFD3610F2074339E2F7F517 /* Dictation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE51DBDDA13349CC02222952 /* Dictation.swift */; };
 		B60C7F69B8FAC56865CE8C42 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44ABD7AB089EE540B1B74190 /* Theme.swift */; };
 		BDA1D48A63A77F87933F9B95 /* WatchGPTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEF414E91D31787E93F3570 /* WatchGPTApp.swift */; };
@@ -40,6 +44,9 @@
 		A1C0DE000000000000000011 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000000010 /* AppIcon.icon */; };
 		F9156B0BE10B8A97B6A59815 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 82FECC0B63A41BCA479439C3 /* Assets.xcassets */; };
 		FB1FB03505CBA10B7F9E902B /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AE555938B2E477948ECCBE /* AudioRecorder.swift */; };
+		D1A7C0DE0000000000000B01 /* ChatGPTHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A7C0DE0000000000000B02 /* ChatGPTHistory.swift */; };
+		D1A7C0DE0000000000000B03 /* GPTHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A7C0DE0000000000000B04 /* GPTHistory.swift */; };
+		D1A7C0DE0000000000000B05 /* GPTChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A7C0DE0000000000000B06 /* GPTChatView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -93,6 +100,10 @@
 		A1C0DE000000000000000001 /* AskIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskIntent.swift; sourceTree = "<group>"; };
 		B2D1F0A0000000000000A001 /* LimitReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitReminder.swift; sourceTree = "<group>"; };
 		B2D1F0A0000000000000A003 /* AppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShortcuts.swift; sourceTree = "<group>"; };
+		B2D1F0A0000000000000A005 /* Power.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Power.swift; sourceTree = "<group>"; };
+		B2D1F0A0000000000000A007 /* DiagnosticsLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLog.swift; sourceTree = "<group>"; };
+		B2D1F0A0000000000000A009 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		B2D1F0A0000000000000A00B /* Handoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Handoff.swift; sourceTree = "<group>"; };
 		AE51DBDDA13349CC02222952 /* Dictation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dictation.swift; sourceTree = "<group>"; };
 		BD4CB45C3CC31D512A6F75DD /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		BD88E2C682B68B006F0AEAA8 /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
@@ -102,6 +113,9 @@
 		D62AAF18566800FF16CF3D3F /* WatchGPT.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WatchGPT.entitlements; sourceTree = "<group>"; };
 		DDCA45F67E8745C6A38E06D3 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		DE1021EB909954CCA53126B2 /* AuthTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTokens.swift; sourceTree = "<group>"; };
+		D1A7C0DE0000000000000B02 /* ChatGPTHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTHistory.swift; sourceTree = "<group>"; };
+		D1A7C0DE0000000000000B04 /* GPTHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPTHistory.swift; sourceTree = "<group>"; };
+		D1A7C0DE0000000000000B06 /* GPTChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPTChatView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -157,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				DDCA45F67E8745C6A38E06D3 /* ChatStore.swift */,
+				D1A7C0DE0000000000000B04 /* GPTHistory.swift */,
 			);
 			path = Store;
 			sourceTree = "<group>";
@@ -166,7 +181,9 @@
 			children = (
 				47C0EBA7939F1AD765106C25 /* ChatView.swift */,
 				C7A1D0E2B4F6A8C0D2E4F604 /* VoiceOrb.swift */,
+				B2D1F0A0000000000000A009 /* DiagnosticsView.swift */,
 				C7A1D0E2B4F6A8C0D2E4F602 /* HistoryView.swift */,
+				D1A7C0DE0000000000000B06 /* GPTChatView.swift */,
 				6E35406A0C9AACEC81F45B0A /* Components.swift */,
 				6FFCB548C1F63055E7030258 /* PairingView.swift */,
 				BD88E2C682B68B006F0AEAA8 /* RecordView.swift */,
@@ -197,6 +214,9 @@
 			isa = PBXGroup;
 			children = (
 				B2D1F0A0000000000000A001 /* LimitReminder.swift */,
+				B2D1F0A0000000000000A005 /* Power.swift */,
+				B2D1F0A0000000000000A007 /* DiagnosticsLog.swift */,
+				B2D1F0A0000000000000A00B /* Handoff.swift */,
 				AE51DBDDA13349CC02222952 /* Dictation.swift */,
 				68B0B96675C5305620AC8BD0 /* MathFormat.swift */,
 				2C6470A349E101E02193BC28 /* QRCode.swift */,
@@ -210,6 +230,7 @@
 			children = (
 				682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */,
 				49C9C6E115012AD1A9E6BB68 /* ChatModels.swift */,
+				D1A7C0DE0000000000000B02 /* ChatGPTHistory.swift */,
 			);
 			path = API;
 			sourceTree = "<group>";
@@ -346,6 +367,9 @@
 				7B972C9AE12252468D7DB5FD /* AuthTokens.swift in Sources */,
 				D83DD68F93CE64286710C57A /* ChatGPTClient.swift in Sources */,
 				1FB96D7A01727E4B626314AD /* ChatModels.swift in Sources */,
+				D1A7C0DE0000000000000B05 /* GPTChatView.swift in Sources */,
+				D1A7C0DE0000000000000B03 /* GPTHistory.swift in Sources */,
+				D1A7C0DE0000000000000B01 /* ChatGPTHistory.swift in Sources */,
 				7B04D98C502A3B920C457762 /* ChatStore.swift in Sources */,
 				E5F0A837AA0703ACC742D9D8 /* ChatView.swift in Sources */,
 				C7A1D0E2B4F6A8C0D2E4F603 /* VoiceOrb.swift in Sources */,
@@ -353,6 +377,10 @@
 				0F3B1507B92564ACC88D35D7 /* Components.swift in Sources */,
 				B2D1F0A0000000000000A002 /* LimitReminder.swift in Sources */,
 				B2D1F0A0000000000000A004 /* AppShortcuts.swift in Sources */,
+				B2D1F0A0000000000000A006 /* Power.swift in Sources */,
+				B2D1F0A0000000000000A008 /* DiagnosticsLog.swift in Sources */,
+				B2D1F0A0000000000000A00A /* DiagnosticsView.swift in Sources */,
+				B2D1F0A0000000000000A00C /* Handoff.swift in Sources */,
 				ADFD3610F2074339E2F7F517 /* Dictation.swift in Sources */,
 				5F6F8BEC1F5BF71993E76856 /* Keychain.swift in Sources */,
 				1FDC136DB8A01E9D4618C7A7 /* MathFormat.swift in Sources */,

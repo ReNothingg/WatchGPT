@@ -1,78 +1,170 @@
 import SwiftUI
 
+enum HistorySource: String, CaseIterable, Identifiable {
+    case gpt, watch
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .gpt: return "ChatGPT"
+        case .watch: return "Часы"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .gpt: return "sparkles"
+        case .watch: return "applewatch"
+        }
+    }
+}
+
 struct HistoryView: View {
     @Environment(ChatStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("history.source") private var source: HistorySource = .watch
     @State private var confirmClear = false
     @State private var appeared = false
 
     var body: some View {
-        Group {
-            if let latest = store.chats.first {
-                List {
-                    Section {
-                        LatestChatCard(chat: latest, isOpen: isOpen(latest)) { open(latest) }
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                            .swipeActions { deleteButton(latest) }
-                            .modifier(Entrance(index: 0, appeared: appeared))
-                    }
+        List {
+            Section {
+                HistorySourcePicker(source: $source)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
 
-                    let rest = Array(store.chats.dropFirst())
-                    if !rest.isEmpty {
-                        Section {
-                            ForEach(Array(rest.enumerated()), id: \.element.id) { index, chat in
-                                ChatRow(chat: chat, isOpen: isOpen(chat)) { open(chat) }
-                                    .swipeActions { deleteButton(chat) }
-                                    .modifier(Entrance(index: index + 1, appeared: appeared))
-                            }
-                        } header: {
-                            Text("Ранее")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(Theme.secondaryText)
-                                .textCase(nil)
-                        }
-                    }
-
-                    Section {
-                        Button(role: .destructive) {
-                            confirmClear = true
-                        } label: {
-                            Label("Очистить историю", systemImage: "trash")
-                                .font(.footnote)
-                                .foregroundStyle(Theme.danger)
-                        }
-                        .listRowBackground(Color.clear)
-                    }
-                }
-                .animation(.snappy(duration: 0.3), value: store.chats.map(\.id))
-            } else {
-                EmptyHistory()
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            switch source {
+            case .watch:
+                WatchHistorySections(appeared: appeared, onOpen: open) { confirmClear = true }
+            case .gpt:
+                GPTHistorySections(appeared: appeared)
             }
         }
-        .navigationTitle("Чаты")
-        .animation(.smooth(duration: 0.35), value: store.chats.isEmpty)
-        .confirmationDialog("Удалить все чаты?", isPresented: $confirmClear) {
+        .animation(.snappy(duration: 0.3), value: store.chats.map(\.id))
+        .animation(.snappy(duration: 0.3), value: store.gptHistory.chats.map(\.id))
+        .navigationTitle(source == .gpt ? "ChatGPT" : "Чаты")
+        .confirmationDialog("Удалить все чаты на часах?", isPresented: $confirmClear) {
             Button("Удалить", role: .destructive) {
                 store.deleteAllChats()
                 WKHaptics.click()
             }
             Button("Отмена", role: .cancel) {}
         }
+        .task(id: source) {
+            if source == .gpt { await store.gptHistory.refresh() }
+        }
         .onAppear {
             withAnimation(.spring(duration: 0.5, bounce: 0.3)) { appeared = true }
         }
-    }
-
-    private func isOpen(_ chat: ChatThread) -> Bool {
-        chat.id == store.conversationID && !store.messages.isEmpty
+        .onChange(of: source) { _, _ in
+            appeared = false
+            Task { @MainActor in
+                withAnimation(.spring(duration: 0.5, bounce: 0.3)) { appeared = true }
+            }
+        }
     }
 
     private func open(_ chat: ChatThread) {
         WKHaptics.click()
         store.openChat(chat.id)
         dismiss()
+    }
+}
+
+private struct HistorySourcePicker: View {
+    @Binding var source: HistorySource
+    @Namespace private var selection
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(HistorySource.allCases) { item in
+                let selected = item == source
+                Button {
+                    guard !selected else { return }
+                    WKHaptics.click()
+                    withAnimation(.snappy(duration: 0.3)) { source = item }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(item.title)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(selected ? Color.black : Theme.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+                    .background {
+                        if selected {
+                            Capsule()
+                                .fill(Theme.accent)
+                                .matchedGeometryEffect(id: "selection", in: selection)
+                        }
+                    }
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle(scale: 0.95))
+                .accessibilityLabel(item == .gpt ? "История ChatGPT" : "История на часах")
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(Theme.surface))
+        .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+        .padding(.bottom, 4)
+    }
+}
+
+private struct WatchHistorySections: View {
+    @Environment(ChatStore.self) private var store
+    let appeared: Bool
+    let onOpen: (ChatThread) -> Void
+    let onClear: () -> Void
+
+    var body: some View {
+        if let latest = store.chats.first {
+            Section {
+                LatestChatCard(chat: latest, isOpen: isOpen(latest)) { onOpen(latest) }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .swipeActions { deleteButton(latest) }
+                    .modifier(Entrance(index: 0, appeared: appeared))
+            }
+
+            let rest = Array(store.chats.dropFirst())
+            if !rest.isEmpty {
+                Section {
+                    ForEach(Array(rest.enumerated()), id: \.element.id) { index, chat in
+                        ChatRow(chat: chat, isOpen: isOpen(chat)) { onOpen(chat) }
+                            .swipeActions { deleteButton(chat) }
+                            .modifier(Entrance(index: index + 1, appeared: appeared))
+                    }
+                } header: {
+                    SectionTitle(text: "Ранее")
+                }
+            }
+
+            Section {
+                Button(role: .destructive, action: onClear) {
+                    Label("Очистить историю", systemImage: "trash")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.danger)
+                }
+                .listRowBackground(Color.clear)
+            }
+        } else {
+            Section {
+                EmptyHistory(icon: "bubble.left.and.bubble.right", title: "Пока пусто", subtitle: "Здесь появятся разговоры с часов")
+                    .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    private func isOpen(_ chat: ChatThread) -> Bool {
+        chat.id == store.conversationID && !store.messages.isEmpty
     }
 
     private func deleteButton(_ chat: ChatThread) -> some View {
@@ -81,6 +173,172 @@ struct HistoryView: View {
         } label: {
             Image(systemName: "trash")
         }
+    }
+}
+
+private struct GPTHistorySections: View {
+    @Environment(ChatStore.self) private var store
+    let appeared: Bool
+
+    private var history: GPTHistory { store.gptHistory }
+
+    var body: some View {
+        if history.chats.isEmpty {
+            Section {
+                placeholder
+                    .listRowBackground(Color.clear)
+            }
+        } else {
+            if let error = history.errorMessage {
+                Section {
+                    HistoryErrorView(message: error, compact: true) { refresh() }
+                        .listRowBackground(Color.clear)
+                }
+            }
+
+            Section {
+                ForEach(Array(history.chats.enumerated()), id: \.element.id) { index, chat in
+                    GPTChatRow(chat: chat, hasCopy: store.hasLocalCopy(ofGPTChat: chat.id)) {
+                        WKHaptics.click()
+                        store.path.append(.gptChat(id: chat.id, title: chat.title))
+                    }
+                    .modifier(Entrance(index: index, appeared: appeared))
+                    .onAppear {
+                        if index >= history.chats.count - 3 {
+                            Task { await history.loadMore() }
+                        }
+                    }
+                }
+
+                if history.isLoadingMore {
+                    Spinner(size: 18, lineWidth: 2)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                } else if let error = history.loadMoreError {
+                    Button {
+                        Task { await history.loadMore() }
+                    } label: {
+                        Label(error, systemImage: "arrow.clockwise")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            } header: {
+                SyncHeader(syncedAt: history.syncedAt, loading: history.isLoading)
+            }
+
+            Section {
+                Button(action: refresh) {
+                    Label("Обновить", systemImage: "arrow.clockwise")
+                        .font(.footnote)
+                        .foregroundStyle(history.isLoading ? Theme.secondaryText : Theme.accent)
+                }
+                .disabled(history.isLoading)
+                .listRowBackground(Color.clear)
+            } footer: {
+                Text("Чаты из вашего аккаунта ChatGPT. Продолжение на часах сохраняется только на часах.")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if let error = history.errorMessage {
+            HistoryErrorView(message: error) { refresh() }
+        } else if history.isLoading || history.syncedAt == nil {
+            VStack(spacing: 10) {
+                Spinner(size: 30, lineWidth: 3)
+                Text("Загружаю чаты ChatGPT…")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+        } else {
+            EmptyHistory(icon: "sparkles", title: "Пока пусто", subtitle: "В аккаунте ChatGPT ещё нет чатов")
+        }
+    }
+
+    private func refresh() {
+        WKHaptics.click()
+        Task { await history.refresh(force: true) }
+    }
+}
+
+private struct SectionTitle: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Theme.secondaryText)
+            .textCase(nil)
+    }
+}
+
+private struct SyncHeader: View {
+    let syncedAt: Date?
+    let loading: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if loading {
+                Spinner(size: 9, lineWidth: 1.5)
+                SectionTitle(text: "Обновляю…")
+            } else if let syncedAt {
+                SectionTitle(text: "Обновлено \(ChatDate.short(syncedAt).lowercased())")
+            } else {
+                SectionTitle(text: "Чаты ChatGPT")
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: loading)
+    }
+}
+
+private struct GPTChatRow: View {
+    let chat: RemoteChat
+    let hasCopy: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(chat.title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                HStack(spacing: 4) {
+                    if chat.updatedAt > .distantPast {
+                        Text(ChatDate.short(chat.updatedAt))
+                    }
+                    if hasCopy {
+                        Image(systemName: "applewatch")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .accessibilityLabel("Есть копия на часах")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(Theme.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle(scale: 0.96))
+    }
+}
+
+private struct GPTBadge: View {
+    var body: some View {
+        Image(systemName: "sparkles")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(Theme.accent)
+            .accessibilityLabel("Из ChatGPT")
     }
 }
 
@@ -136,6 +394,10 @@ private struct LatestChatCard: View {
                         .font(.system(size: 9, weight: .semibold))
                     Text("\(chat.messageCount)")
                         .monospacedDigit()
+                    if chat.isFromGPT {
+                        GPTBadge()
+                            .padding(.leading, 2)
+                    }
                     Spacer(minLength: 4)
                     Text(isOpen ? "Открыть" : "Продолжить")
                         .fontWeight(.semibold)
@@ -164,8 +426,8 @@ private struct LatestChatCard: View {
 private struct CardBackground: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-        TimelineView(.animation(minimumInterval: 1 / 20)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
+        LiveTimeline(role: .decorative, fps: 20, idleAfter: .seconds(8)) { date in
+            let t = date.timeIntervalSinceReferenceDate
             let x = 0.5 + 0.5 * cos(t * 0.5)
             let y = 0.5 * sin(t * 0.4)
             shape
@@ -197,8 +459,8 @@ private struct LiveDot: View {
     let active: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 20, paused: !active)) { context in
-            let p = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
+        LiveTimeline(role: .status, fps: 20, isActive: active) { date in
+            let p = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
             ZStack {
                 if active {
                     Circle()
@@ -230,6 +492,9 @@ private struct ChatRow: View {
                     if isOpen {
                         Circle().fill(Theme.accent).frame(width: 5, height: 5)
                     }
+                    if chat.isFromGPT {
+                        GPTBadge()
+                    }
                     Text(ChatDate.short(chat.updatedAt))
                         .foregroundStyle(isOpen ? Theme.accent : Theme.secondaryText)
                     if !chat.preview.isEmpty {
@@ -250,22 +515,27 @@ private struct ChatRow: View {
 }
 
 private struct EmptyHistory: View {
+    let icon: String
+    let title: String
+    let subtitle: String
     @State private var pulse = false
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: "bubble.left.and.bubble.right")
+            Image(systemName: icon)
                 .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(Theme.accent)
                 .symbolEffect(.bounce, value: pulse)
-            Text("Пока пусто")
+            Text(title)
                 .font(.headline)
-            Text("Здесь появятся ваши разговоры")
+            Text(subtitle)
                 .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .padding(.horizontal, 8)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
         .onAppear { pulse.toggle() }
     }
 }

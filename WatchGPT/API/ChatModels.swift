@@ -3,11 +3,49 @@ import Foundation
 struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     enum Role: String, Codable, Sendable { case user, assistant }
 
+    enum Refinement: String, Codable, Sendable {
+        case shorter, longer
+
+        var label: String {
+            switch self {
+            case .shorter: return "Короче"
+            case .longer: return "Подробнее"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .shorter: return "arrow.down.right.and.arrow.up.left"
+            case .longer: return "arrow.up.left.and.arrow.down.right"
+            }
+        }
+
+        var prompt: String {
+            switch self {
+            case .shorter:
+                return "Rewrite your previous answer much shorter: one or two sentences with only the key point. Reply in the same language as your previous answer."
+            case .longer:
+                return "Expand your previous answer: add more detail, explanation and an example, but keep it easy to read on a small watch screen. Reply in the same language as your previous answer."
+            }
+        }
+
+        var verbosity: String {
+            switch self {
+            case .shorter: return "low"
+            case .longer: return "high"
+            }
+        }
+    }
+
     var id = UUID()
     var role: Role
     var text: String
     var isError = false
     var date = Date.now
+    var fromGPT: Bool?
+    var refine: Refinement?
+
+    var modelText: String { refine?.prompt ?? text }
 }
 
 struct ModelOption: Codable, Identifiable, Hashable, Sendable {
@@ -58,18 +96,25 @@ struct ChatThread: Codable, Identifiable, Equatable, Sendable {
     var updatedAt: Date
     var messages: [ChatMessage]
 
-    init?(id: String, messages: [ChatMessage]) {
+    static let gptPrefix = "gpt-"
+
+    static func gptID(_ remoteID: String) -> String { gptPrefix + remoteID }
+
+    init?(id: String, messages: [ChatMessage], title: String? = nil) {
         let kept = messages.filter { !$0.text.isEmpty }
         guard let question = kept.first(where: { $0.role == .user }) else { return nil }
         self.id = id
         self.messages = kept
-        self.title = Self.clip(question.text, 80)
+        let custom = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.title = Self.clip(custom.isEmpty ? question.text : custom, 80)
         let answer = kept.last { $0.role == .assistant && !$0.isError }
         self.preview = answer.map { Self.clip(MathFormat.plain($0.text), 140) } ?? ""
         self.updatedAt = kept.last?.date ?? question.date
     }
 
     var messageCount: Int { messages.count }
+
+    var isFromGPT: Bool { id.hasPrefix(Self.gptPrefix) }
 
     private static func clip(_ text: String, _ limit: Int) -> String {
         let flat = text

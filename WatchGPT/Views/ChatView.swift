@@ -1,7 +1,8 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case settings, models, usage, voice, history
+    case settings, models, usage, voice, history, diagnostics
+    case gptChat(id: String, title: String)
 }
 
 struct ChatView: View {
@@ -71,10 +72,18 @@ struct ChatView: View {
             case .usage: UsageView()
             case .voice: VoiceSettingsView()
             case .history: HistoryView()
+            case .diagnostics: DiagnosticsView()
+            case let .gptChat(id, title): GPTChatView(chatID: id, title: title)
             }
         }
         .fullScreenCover(isPresented: Bindable(store).isVoiceSheetPresented) {
             RecordView()
+        }
+        .handoffActivity(
+            isActive: store.handoff && store.path.isEmpty && store.lastAnswer != nil,
+            title: "Чат WatchGPT"
+        ) {
+            Handoff.url(conversationID: store.conversationID, messages: store.messages)
         }
         .onChange(of: store.pendingAsk) { _, pending in
             if pending { openDictationFromWidget() }
@@ -226,7 +235,17 @@ private struct MessageRow: View, Equatable {
                 }
             } else if message.text.isEmpty && isLast && store.isBusy {
                 let searching = store.status == .searching
-                if isLuminanceReduced {
+                if store.status == .waitingForNetwork {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Нет сети", systemImage: "wifi.slash")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.orange)
+                        Text("Вопрос отправится сам, когда появится связь.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .transition(.opacity)
+                } else if isLuminanceReduced {
                     Label(searching ? "Ищу в интернете…" : "Готовлю ответ…", systemImage: searching ? "globe" : "ellipsis")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -249,10 +268,51 @@ private struct MessageRow: View, Equatable {
                                 .transition(.opacity.combined(with: .scale))
                         }
                     }
+                    if isLast && store.canRefine {
+                        RefineBar()
+                            .padding(.top, 4)
+                            .transition(.opacity.combined(with: .offset(y: 6)))
+                    }
                 }
                 .transition(.opacity.combined(with: .offset(y: 6)))
                 .animation(.easeOut(duration: 0.25), value: isLast && store.status == .streaming)
+                .animation(.easeOut(duration: 0.25), value: isLast && store.canRefine)
             }
         }
+    }
+}
+
+private struct RefineBar: View {
+    @Environment(ChatStore.self) private var store
+
+    var body: some View {
+        HStack(spacing: 6) {
+            chip(.shorter)
+            chip(.longer)
+        }
+    }
+
+    private func chip(_ kind: ChatMessage.Refinement) -> some View {
+        Button {
+            WKHaptics.click()
+            store.refine(kind)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: kind.icon)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(kind.label)
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+            .background(Capsule().fill(Theme.surface))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle(scale: 0.94))
+        .accessibilityLabel(kind == .shorter ? "Ответить короче" : "Ответить подробнее")
     }
 }

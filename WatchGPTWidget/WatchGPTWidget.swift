@@ -101,44 +101,43 @@ struct AskWidgetView: View {
         }
     }
 
-    // Smart Stack / rectangular complication
     private var rectangular: some View {
-        HStack(spacing: 8) {
-            ZStack {
-                Circle().fill(Theme.accent)
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.black)
-            }
-            .frame(width: 36, height: 36)
-            .widgetAccentable()
+        let usage = entry.snapshot.usage
+        let rings = [usage?.primary, usage?.secondary].compactMap { $0 }.prefix(2).enumerated().map { index, window in
+            ActivityRing(fraction: window.remainingPercent(at: entry.date) / 100, color: RingPalette.color(index, window.remainingPercent(at: entry.date)))
+        }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Спросить")
-                    .font(.headline)
-                    .widgetAccentable()
+        return HStack(spacing: 10) {
+            ActivityRings(rings: Array(rings), placeholderCount: entry.snapshot.signedIn ? 1 : 2)
+                .frame(width: 58, height: 58)
+                .widgetAccentable()
+
+            VStack(alignment: .leading, spacing: 0) {
                 if !entry.snapshot.signedIn {
-                    Text("Подключите ChatGPT")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else if let left = entry.remaining, let window = entry.window {
-                    Text("Осталось \(Theme.percent(left)) · \(window.shortLabel)")
-                        .font(.caption2)
-                        .monospacedDigit()
-                    ProgressView(value: left, total: 100)
-                        .tint(Theme.usageColor(left))
+                    StatLine(value: "ChatGPT", unit: nil, color: RingPalette.mint)
+                    StatLine(value: "Войдите", unit: nil, color: RingPalette.cyan)
+                } else if usage?.primary == nil && usage?.secondary == nil {
+                    StatLine(value: "ChatGPT", unit: nil, color: RingPalette.mint)
                 } else {
-                    Text(entry.snapshot.modelName ?? "ChatGPT")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    ForEach(Array([usage?.primary, usage?.secondary].compactMap { $0 }.prefix(2).enumerated()), id: \.offset) { index, window in
+                        let left = window.remainingPercent(at: entry.date)
+                        StatLine(value: Theme.percent(left), unit: window.shortLabel, color: RingPalette.color(index, left))
+                    }
                 }
+                HStack(spacing: 4) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Спросить")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                .foregroundStyle(RingPalette.violet)
+                .widgetAccentable()
             }
             Spacer(minLength: 0)
         }
-        .containerBackground(for: .widget) {
-            LinearGradient(colors: [Theme.accent.opacity(0.35), Theme.accent.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
+        .containerBackground(.ultraThinMaterial, for: .widget)
     }
 
     private var circular: some View {
@@ -192,5 +191,75 @@ struct AskWidgetView: View {
             }
         }
         .containerBackground(for: .widget) { Color.clear }
+    }
+}
+
+enum RingPalette {
+    static let mint = Color(red: 0.24, green: 0.92, blue: 0.68)
+    static let cyan = Color(red: 0.30, green: 0.86, blue: 0.96)
+    static let violet = Color(red: 0.70, green: 0.60, blue: 1.0)
+
+    static func color(_ index: Int, _ remaining: Double) -> Color {
+        if remaining < 20 { return Theme.usageColor(remaining) }
+        return index == 0 ? mint : cyan
+    }
+}
+
+struct ActivityRing {
+    let fraction: Double
+    let color: Color
+}
+
+private struct ActivityRings: View {
+    let rings: [ActivityRing]
+    var placeholderCount: Int = 1
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let items = rings.isEmpty
+                ? Array(repeating: ActivityRing(fraction: 0, color: RingPalette.mint), count: placeholderCount)
+                : rings
+            let line = side * (items.count > 1 ? 0.17 : 0.2)
+            ZStack {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, ring in
+                    let inset = CGFloat(index) * (line + side * 0.03) + line / 2
+                    Circle()
+                        .inset(by: inset)
+                        .stroke(ring.color.opacity(0.22), lineWidth: line)
+                    if ring.fraction > 0 {
+                        Circle()
+                            .inset(by: inset)
+                            .trim(from: 0, to: min(1, ring.fraction))
+                            .stroke(ring.color, style: StrokeStyle(lineWidth: line, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                }
+            }
+            .frame(width: side, height: side)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct StatLine: View {
+    let value: String
+    let unit: String?
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(value)
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            if let unit {
+                Text(unit)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded).smallCaps())
+            }
+        }
+        .foregroundStyle(color)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .widgetAccentable()
     }
 }

@@ -45,6 +45,7 @@ struct ChatGPTClient: Sendable {
         var verbosity: String?
         var fast: Bool = false
         var instructions: String
+        var context: String? = nil
         var conversationID: String
     }
 
@@ -89,7 +90,7 @@ struct ChatGPTClient: Sendable {
                 data.append(byte)
                 if data.count > 16_384 { break }
             }
-            throw Self.error(status: http.statusCode, body: data)
+            throw Self.error(status: http.statusCode, body: data, response: http)
         }
 
         var sawText = false
@@ -151,6 +152,13 @@ struct ChatGPTClient: Sendable {
                 "content": [["type": isUser ? "input_text" : "output_text", "text": message.text]],
             ])
         }
+        if let context = options.context, !context.isEmpty {
+            input.append([
+                "type": "message",
+                "role": "developer",
+                "content": [["type": "input_text", "text": context]],
+            ])
+        }
 
         var body: [String: Any] = [
             "model": options.model,
@@ -183,7 +191,7 @@ struct ChatGPTClient: Sendable {
         let request = makeRequest(Self.baseURL.appending(path: "wham/usage"), method: "GET")
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { throw Self.error(status: status, body: data) }
+        guard (200..<300).contains(status) else { throw Self.error(status: status, body: data, response: response as? HTTPURLResponse) }
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw APIError.stream("Не удалось прочитать лимиты.")
         }
@@ -245,7 +253,7 @@ struct ChatGPTClient: Sendable {
         let request = makeRequest(components.url!, method: "GET")
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { throw Self.error(status: status, body: data) }
+        guard (200..<300).contains(status) else { throw Self.error(status: status, body: data, response: response as? HTTPURLResponse) }
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let models = obj["models"] as? [[String: Any]] else { return [] }
 
@@ -291,13 +299,18 @@ struct ChatGPTClient: Sendable {
         }
     }
 
-    static func error(status: Int, body: Data) -> APIError {
+    static func error(status: Int, body: Data, response: HTTPURLResponse? = nil) -> APIError {
         if status == 401 { return .unauthorized }
 
         let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
         let error = obj?["error"] as? [String: Any]
-        let type = (error?["type"] as? String) ?? (error?["code"] as? String) ?? ""
-        let message = (error?["message"] as? String) ?? (obj?["detail"] as? String) ?? ""
+        let detail = obj?["detail"] as? [String: Any]
+        let type = (error?["type"] as? String) ?? (error?["code"] as? String) ?? (detail?["code"] as? String) ?? ""
+        let message = (error?["message"] as? String) ?? (obj?["detail"] as? String) ?? (detail?["message"] as? String) ?? ""
+
+        if status == 403 {
+            return forbidden(obj: obj, type: type, message: message, body: body, response: response)
+        }
 
         if status == 429 || type.contains("usage_limit") {
             var resetAt = number(error?["resets_at"]).map { Date(timeIntervalSince1970: $0) }
@@ -308,5 +321,35 @@ struct ChatGPTClient: Sendable {
             return .http(status, message.isEmpty ? "Слишком много запросов. Подождите немного." : message)
         }
         return .http(status, message)
+    }
+
+    private static func forbidden(
+        obj: [String: Any]?,
+        type: String,
+        message: String,
+        body: Data,
+        response: HTTPURLResponse?
+    ) -> APIError {
+        let contentType = response?.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+        let text = String(decoding: body.prefix(4096), as: UTF8.self).lowercased()
+        let ray = response?.value(forHTTPHeaderField: "cf-ray").map { " Ray \($0)." } ?? ""
+
+        let isCloudflare = response?.value(forHTTPHeaderField: "cf-mitigated") != nil
+            || (obj == nil && (contentType.contains("text/html")
+                || text.contains("cloudflare")
+                || text.contains("just a moment")
+                || text.contains("attention required")
+                || text.contains("<html")))
+        if isCloudflare {
+            return .http(403, "Cloudflare заблокировал запрос (403): IP вашего DNS/прокси под подозрением. Смените DNS или включите VPN.\(ray)")
+        }
+
+        let hint = (type + " " + message).lowercased()
+        if ["unsupported_country", "country", "region", "territory"].contains(where: hint.contains) {
+            return .http(403, "OpenAI не обслуживает ваш регион (403). Нужен DNS или VPN с поддерживаемой страной.")
+        }
+
+        let reason = message.isEmpty ? (type.isEmpty ? "без пояснений" : type) : message
+        return .http(403, "Аккаунт: доступ запрещён (403) — \(reason). Проверьте подписку или войдите заново.")
     }
 }

@@ -175,6 +175,7 @@ private extension AnyTransition {
 
 private struct MessageRow: View, Equatable {
     @Environment(ChatStore.self) private var store
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     let message: ChatMessage
     let isLast: Bool
 
@@ -225,16 +226,28 @@ private struct MessageRow: View, Equatable {
                 }
             } else if message.text.isEmpty && isLast && store.isBusy {
                 let searching = store.status == .searching
-                ThinkingIndicator(label: searching ? "Ищу в интернете" : "Думаю", searching: searching)
-                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+                if isLuminanceReduced {
+                    Label(searching ? "Ищу в интернете…" : "Готовлю ответ…", systemImage: searching ? "globe" : "ellipsis")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ThinkingIndicator(label: searching ? "Ищу в интернете" : "Думаю", searching: searching)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+                }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     MarkdownText(text: message.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .onTapGesture(count: 2) { store.speaker.toggle(message.text) }
                     if isLast && store.status == .streaming {
-                        StreamingDot()
-                            .transition(.opacity.combined(with: .scale))
+                        if isLuminanceReduced {
+                            Text("Ответ ещё пишется…")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            StreamingDot()
+                                .transition(.opacity.combined(with: .scale))
+                        }
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: 6)))

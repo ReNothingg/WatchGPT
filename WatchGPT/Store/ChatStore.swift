@@ -63,6 +63,11 @@ final class ChatStore {
 
     private(set) var conversationID = UUID().uuidString
     private var sendTask: Task<Void, Never>?
+    @ObservationIgnored private var isInBackground = false
+    @ObservationIgnored private var interruptedInBackground = false
+    @ObservationIgnored private var resumeOnActive = false
+    @ObservationIgnored private var didAutoResume = false
+    @ObservationIgnored private var lastStreamActivity = Date.now
     private var lastMetaRefresh: Date?
     private let defaults = UserDefaults.standard
 
@@ -223,9 +228,17 @@ final class ChatStore {
     // MARK: Sending
 
     func send(_ raw: String) {
+        didAutoResume = false
+        submit(raw)
+    }
+
+    private func submit(_ raw: String) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isBusy else { return }
         speaker.stop()
+        interruptedInBackground = isInBackground
+        resumeOnActive = false
+        lastStreamActivity = .now
 
         let question = ChatMessage(role: .user, text: text)
         let reply = ChatMessage(role: .assistant, text: "")
@@ -242,15 +255,53 @@ final class ChatStore {
 
     /// Re-asks the last question (after an error).
     func retry() {
+        didAutoResume = false
+        resend()
+    }
+
+    private func resend() {
         guard !isBusy, let lastUser = messages.lastIndex(where: { $0.role == .user }) else { return }
         let text = messages[lastUser].text
         messages.removeSubrange(lastUser...)
-        send(text)
+        submit(text)
     }
 
     func stop() {
+        resumeOnActive = false
         sendTask?.cancel()
         sendTask = nil
+    }
+
+    // MARK: Background
+
+    func sceneEnteredBackground() {
+        isInBackground = true
+        if isBusy { interruptedInBackground = true }
+    }
+
+    func sceneBecameActive() {
+        isInBackground = false
+        if isBusy {
+            guard interruptedInBackground, !didAutoResume,
+                  Date.now.timeIntervalSince(lastStreamActivity) > 15 else { return }
+            resumeOnActive = true
+            sendTask?.cancel()
+        } else if resumeOnActive {
+            resumeInterrupted()
+        }
+    }
+
+    private func resumeInterrupted() {
+        resumeOnActive = false
+        interruptedInBackground = false
+        guard !didAutoResume, !isInBackground else { return }
+        didAutoResume = true
+        resend()
+    }
+
+    private static func isTransient(_ error: Error) -> Bool {
+        if let urlError = error as? URLError { return urlError.code != .cancelled }
+        return (error as NSError).domain == NSPOSIXErrorDomain
     }
 
     func newChat() {
@@ -308,6 +359,13 @@ final class ChatStore {
             sendTask = nil
             if conversationID == chatID { saveConversation() }
             publishWidget()
+            if resumeOnActive {
+                if !isInBackground {
+                    Task { @MainActor [weak self] in self?.resumeInterrupted() }
+                }
+            } else {
+                interruptedInBackground = false
+            }
         }
 
         while true {
@@ -329,6 +387,7 @@ final class ChatStore {
 
                 do {
                     for try await event in stream {
+                        lastStreamActivity = .now
                         switch event {
                         case let .textDelta(delta):
                             if status != .streaming { status = .streaming }
@@ -368,8 +427,13 @@ final class ChatStore {
                     if text(of: replyID).isEmpty { messages.removeAll { $0.id == replyID } }
                     return
                 }
+                if (isInBackground || interruptedInBackground) && !didAutoResume && Self.isTransient(error) {
+                    resumeOnActive = true
+                    return
+                }
                 fail(replyID, error)
-                if case ChatGPTClient.APIError.usageLimit = error {
+                if case let ChatGPTClient.APIError.usageLimit(resetAt) = error {
+                    if let resetAt { LimitReminder.schedule(at: resetAt) }
                     Task { await refreshUsage() }
                 }
                 return
@@ -411,12 +475,12 @@ final class ChatStore {
             verbosity: model.supportsVerbosity ? (conciseAnswers ? "low" : "medium") : nil,
             fast: fastMode && model.supportsFast == true,
             instructions: instructions(),
+            context: "Current date and time: \(Date.now.formatted(date: .complete, time: .shortened)).",
             conversationID: conversationID
         )
     }
 
     private func instructions() -> String {
-        let now = Date.now.formatted(date: .complete, time: .shortened)
         let style = conciseAnswers
             ? "Be brief: lead with the answer, then at most 2–4 short sentences or a compact list. Expand only if the user explicitly asks for detail."
             : "Be clear and well structured, but keep in mind the screen is small; avoid filler."
@@ -430,7 +494,7 @@ final class ChatStore {
         on its own line in \\[ … \\]. The screen is about 180 points wide, so keep each displayed formula short: \
         split long derivations into several \\[ … \\] lines, avoid wide matrices, never put formulas in code blocks. \
         Simple chemistry like H₂O can stay as plain text. \
-        Current date and time: \(now). Locale: \(Locale.current.identifier).
+        Locale: \(Locale.current.identifier).
         """
     }
 
@@ -544,6 +608,7 @@ final class ChatStore {
         guard merged != usage else { return }
         usage = merged
         if let data = try? JSONEncoder().encode(merged) { defaults.set(data, forKey: Keys.usage) }
+        LimitReminder.update(for: merged)
         publishWidget()
     }
 
@@ -551,6 +616,7 @@ final class ChatStore {
         deleteAllChats()
         usage = nil
         defaults.removeObject(forKey: Keys.usage)
+        LimitReminder.update(for: nil)
         publishWidget()
     }
 

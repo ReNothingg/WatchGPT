@@ -150,6 +150,7 @@ private struct LiveSendButton: View {
             .contentShape(Circle().scale(0.6))
         }
         .buttonStyle(PressableStyle(scale: 0.9))
+        .doubleTapAction(isEnabled: store.recorder.isActive && !processing)
         .allowsHitTesting(store.recorder.isActive && !processing)
         .accessibilityLabel("Отправить")
     }
@@ -243,6 +244,7 @@ private struct FailedContent: View {
                     Label("Повторить", systemImage: "arrow.clockwise")
                 }
                 .tint(Theme.accent)
+                .doubleTapAction()
 
                 TextFieldLink(prompt: Text("Спросите что угодно")) {
                     Label("Диктовка Apple", systemImage: "mic")

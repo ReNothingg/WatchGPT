@@ -26,9 +26,11 @@ struct WatchGPTApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                store.sceneBecameActive()
                 if AskRequest.consume() { store.pendingAsk = true }
                 Task { await store.refreshMeta() }
             } else if phase == .background {
+                store.sceneEnteredBackground()
                 store.publishWidget()
             }
         }

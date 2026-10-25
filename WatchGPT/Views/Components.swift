@@ -146,6 +146,17 @@ struct StreamingDot: View {
     }
 }
 
+extension View {
+    @ViewBuilder
+    func doubleTapAction(isEnabled: Bool = true) -> some View {
+        if #available(watchOS 11.0, *) {
+            handGestureShortcut(.primaryAction, isEnabled: isEnabled)
+        } else {
+            self
+        }
+    }
+}
+
 struct PressableStyle: ButtonStyle {
     var scale: CGFloat = 0.88
 
@@ -204,6 +215,7 @@ struct AskButton: View {
                     MicCircle(size: size, halo: halo)
                 }
                 .buttonStyle(PressableStyle())
+                .doubleTapAction(isEnabled: !store.isVoiceSheetPresented)
                 .accessibilityLabel("Спросить голосом")
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
             } else {
@@ -213,6 +225,7 @@ struct AskButton: View {
                     store.send(text)
                 }
                 .buttonStyle(PressableStyle())
+                .doubleTapAction(isEnabled: !store.isVoiceSheetPresented)
                 .accessibilityLabel("Спросить")
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
             }

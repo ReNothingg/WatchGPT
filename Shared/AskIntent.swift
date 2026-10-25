@@ -20,11 +20,13 @@ enum AskRequest {
     }
 }
 
-@available(watchOS 26.0, *)
 struct AskChatGPTIntent: AppIntent {
     static let title: LocalizedStringResource = "Спросить ChatGPT"
     static let description = IntentDescription("Открывает WatchGPT и сразу включает диктовку.")
-    static let supportedModes: IntentModes = .foreground
+    static var openAppWhenRun: Bool { true }
+
+    @available(watchOS 26.0, *)
+    static var supportedModes: IntentModes { .foreground }
 
     @MainActor
     func perform() async throws -> some IntentResult {

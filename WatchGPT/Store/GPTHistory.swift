@@ -24,14 +24,14 @@ final class GPTHistory {
     private static let maxChats = 300
     private static let maxCached = 8
 
-    private struct Snapshot: Codable {
+    private struct Snapshot: Codable, Sendable {
         var chats: [RemoteChat]
         var syncedAt: Date?
     }
 
     init(auth: AuthService) {
         self.auth = auth
-        if let data = try? Data(contentsOf: fileURL),
+        if let data = try? Data(contentsOf: Self.fileURL),
            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) {
             chats = snapshot.chats
             syncedAt = snapshot.syncedAt
@@ -130,7 +130,7 @@ final class GPTHistory {
         blockedUntil = nil
         cache = [:]
         cacheOrder = []
-        try? FileManager.default.removeItem(at: fileURL)
+        DiskWriter.shared.remove(Self.fileURL)
     }
 
     static func isCancellation(_ error: Error) -> Bool {
@@ -157,14 +157,9 @@ final class GPTHistory {
         }
     }
 
-    private var fileURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appending(path: "gpt-chats.json")
-    }
+    private static let fileURL = AppFiles.url("gpt-chats.json")
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(Snapshot(chats: chats, syncedAt: syncedAt)) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        DiskWriter.shared.writeJSON(Snapshot(chats: chats, syncedAt: syncedAt), to: Self.fileURL)
     }
 }

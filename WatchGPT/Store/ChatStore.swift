@@ -80,7 +80,11 @@ final class ChatStore {
     @ObservationIgnored private var didAutoResume = false
     @ObservationIgnored private var lastStreamActivity = Date.now
     @ObservationIgnored private var siriRequest = false
-    private var lastMetaRefresh: Date?
+    @ObservationIgnored private var lastMetaRefresh: Date?
+    @ObservationIgnored private var publishedWidget: WidgetSnapshot?
+    @ObservationIgnored private var historyLoaded = false
+    @ObservationIgnored private var deletedBeforeLoad: Set<String> = []
+    @ObservationIgnored private var clearedBeforeLoad = false
     private let defaults = UserDefaults.standard
 
     private enum Keys {
@@ -96,6 +100,7 @@ final class ChatStore {
         static let whisperMode = "settings.whisperMode"
         static let answerFontScale = "settings.answerFontScale"
         static let models = "cache.models"
+        static let modelsFetchedAt = "cache.modelsFetchedAt"
         static let effortOverrides = "cache.effortOverrides"
         static let usage = "cache.usage"
     }
@@ -440,6 +445,7 @@ final class ChatStore {
             scrollTarget = nil
         }
         chats.removeAll { $0.id == id }
+        if !historyLoaded { deletedBeforeLoad.insert(id) }
         writeChats()
         publishWidget()
     }
@@ -451,6 +457,11 @@ final class ChatStore {
         conversationID = UUID().uuidString
         scrollTarget = nil
         chats = []
+        if !historyLoaded {
+            clearedBeforeLoad = true
+            deletedBeforeLoad = []
+            DiskWriter.shared.writeJSON([ChatThread](), to: Self.chatsURL)
+        }
         writeChats()
         publishWidget()
     }
@@ -482,6 +493,10 @@ final class ChatStore {
 
                 var pending = ""
                 var lastFlush = ContinuousClock.now - .seconds(1)
+                func flushInterval() -> Duration {
+                    if WKApplication.shared().applicationState != .active { return .seconds(1) }
+                    return PowerMonitor.shared.isLowPower ? .milliseconds(250) : .milliseconds(120)
+                }
                 func flush() {
                     guard !pending.isEmpty else { return }
                     let chunk = pending
@@ -502,7 +517,7 @@ final class ChatStore {
                         case let .textDelta(delta):
                             if status != .streaming { status = .streaming }
                             pending += delta
-                            if ContinuousClock.now - lastFlush >= .milliseconds(120) { flush() }
+                            if ContinuousClock.now - lastFlush >= flushInterval() { flush() }
                         case .searching:
                             if status != .streaming && status != .searching { status = .searching }
                         case let .usage(snapshot):
@@ -619,12 +634,12 @@ final class ChatStore {
     }
 
     private func update(_ id: UUID, _ change: (inout ChatMessage) -> Void) {
-        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
         change(&messages[index])
     }
 
     private func text(of id: UUID) -> String {
-        messages.first { $0.id == id }?.text ?? ""
+        messages.last { $0.id == id }?.text ?? ""
     }
 
     // MARK: Usage & models
@@ -634,14 +649,31 @@ final class ChatStore {
         if url.host == "ask" { pendingAsk = true }
     }
 
+    private static let usageMaxAge: TimeInterval = 120
+    private static let modelsMaxAge: TimeInterval = 6 * 3600
+
     /// Refreshes limits and the model list (throttled unless forced).
     func refreshMeta(force: Bool = false) async {
         guard auth.isSignedIn else { return }
-        if !force, let last = lastMetaRefresh, Date.now.timeIntervalSince(last) < 60 { return }
-        lastMetaRefresh = .now
-        async let usageTask: Void = refreshUsage()
-        async let modelsTask: Void = refreshModels()
-        _ = await (usageTask, modelsTask)
+        let now = Date.now
+        if !force, let last = lastMetaRefresh, now.timeIntervalSince(last) < 60 { return }
+        lastMetaRefresh = now
+        let usageStale = force || usage.map { now.timeIntervalSince($0.updatedAt) >= Self.usageMaxAge } ?? true
+        let modelsStale = modelsAreStale(maxAge: Self.modelsMaxAge)
+        await withTaskGroup(of: Void.self) { group in
+            if usageStale { group.addTask { await self.refreshUsage() } }
+            if modelsStale { group.addTask { await self.refreshModels() } }
+        }
+    }
+
+    func refreshModels(ifOlderThan maxAge: TimeInterval) async {
+        guard auth.isSignedIn, modelsAreStale(maxAge: maxAge) else { return }
+        await refreshModels()
+    }
+
+    private func modelsAreStale(maxAge: TimeInterval) -> Bool {
+        guard let fetchedAt = defaults.object(forKey: Keys.modelsFetchedAt) as? Date else { return true }
+        return Date.now.timeIntervalSince(fetchedAt) >= maxAge
     }
 
     func refreshUsage() async {
@@ -671,7 +703,9 @@ final class ChatStore {
             return
         }
         guard !fetched.isEmpty else { return }
-        models = applyEffortOverrides(fetched)
+        defaults.set(Date.now, forKey: Keys.modelsFetchedAt)
+        let adjusted = applyEffortOverrides(fetched)
+        if adjusted != models { models = adjusted }
         if let data = try? JSONEncoder().encode(fetched) { defaults.set(data, forKey: Keys.models) }
         if !fetched.contains(where: { $0.slug == selectedModelSlug }) {
             selectedModelSlug = fetched[0].slug
@@ -733,8 +767,10 @@ final class ChatStore {
         var merged = usage.map { $0.merged(with: snapshot) } ?? snapshot
         if merged.planType == nil { merged.planType = auth.tokens?.planType }
         guard merged != usage else { return }
+        let contentChanged = merged.ignoringTimestamp != usage?.ignoringTimestamp
         usage = merged
         if let data = try? JSONEncoder().encode(merged) { defaults.set(data, forKey: Keys.usage) }
+        guard contentChanged else { return }
         LimitReminder.update(for: merged)
         publishWidget()
     }
@@ -745,6 +781,7 @@ final class ChatStore {
         path = []
         usage = nil
         defaults.removeObject(forKey: Keys.usage)
+        defaults.removeObject(forKey: Keys.modelsFetchedAt)
         LimitReminder.update(for: nil)
         publishWidget()
     }
@@ -752,48 +789,56 @@ final class ChatStore {
     // MARK: Widget
 
     func publishWidget() {
-        let snapshot = WidgetSnapshot(
-            signedIn: auth.isSignedIn,
-            usage: usage,
-            modelName: selectedModel.displayName,
-            lastAnswer: lastAnswer.map { String(MathFormat.plain($0.text).prefix(240)) }
-        )
-        guard snapshot != SharedStore.load() else { return }
+        let snapshot = WidgetSnapshot(signedIn: auth.isSignedIn, usage: usage?.forWidget)
+        let previous = publishedWidget ?? SharedStore.load()
+        publishedWidget = snapshot
+        guard snapshot != previous else { return }
         SharedStore.save(snapshot)
-        WidgetCenter.shared.reloadAllTimelines()
+        WidgetCenter.shared.reloadTimelines(ofKind: SharedStore.widgetKind)
     }
 
     // MARK: Persistence
 
     private static let historyLimit = 60
     private static let importLimit = 50
+    private static let restoreWindow: TimeInterval = 6 * 3600
 
-    private var storeDirectory: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
-    private var chatsURL: URL { storeDirectory.appending(path: "chats.json") }
-    private var legacyConversationURL: URL { storeDirectory.appending(path: "conversation.json") }
+    private static let chatsURL = AppFiles.url("chats.json")
+    private static let latestChatURL = AppFiles.url("latest-chat.json")
+    private static let legacyConversationURL = AppFiles.url("conversation.json")
 
     private struct LegacyConversation: Codable {
         var id: String
         var messages: [ChatMessage]
     }
 
+    nonisolated private static func read<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+
     private func loadConversation() {
-        if let data = try? Data(contentsOf: chatsURL),
-           let saved = try? JSONDecoder().decode([ChatThread].self, from: data) {
+        if let latest = Self.read(ChatThread.self, from: Self.latestChatURL) {
+            chats = [latest]
+            restore(latest)
+            Task { await loadHistory() }
+            return
+        }
+        historyLoaded = true
+        if let saved = Self.read([ChatThread].self, from: Self.chatsURL) {
             chats = saved.sorted { $0.updatedAt > $1.updatedAt }
-        } else if let data = try? Data(contentsOf: legacyConversationURL),
-                  let legacy = try? JSONDecoder().decode(LegacyConversation.self, from: data),
+            if let latest = chats.first { DiskWriter.shared.writeJSON(latest, to: Self.latestChatURL) }
+        } else if let legacy = Self.read(LegacyConversation.self, from: Self.legacyConversationURL),
                   let thread = ChatThread(id: legacy.id, messages: legacy.messages) {
             chats = [thread]
             writeChats()
-            try? FileManager.default.removeItem(at: legacyConversationURL)
+            try? FileManager.default.removeItem(at: Self.legacyConversationURL)
         }
-        guard let latest = chats.first, Date.now.timeIntervalSince(latest.updatedAt) <= 6 * 3600 else { return }
+        if let latest = chats.first { restore(latest) }
+    }
+
+    private func restore(_ latest: ChatThread) {
+        guard Date.now.timeIntervalSince(latest.updatedAt) <= Self.restoreWindow else { return }
         conversationID = latest.id
         messages = latest.messages
         scrollTarget = messages.last(where: { $0.role == .user })?.id
@@ -803,6 +848,30 @@ final class ChatStore {
         }
     }
 
+    private func loadHistory() async {
+        let url = Self.chatsURL
+        let saved = await Task.detached(priority: .userInitiated) {
+            ChatStore.read([ChatThread].self, from: url) ?? []
+        }.value
+
+        var merged = clearedBeforeLoad ? [] : saved.filter { !deletedBeforeLoad.contains($0.id) }
+        for thread in chats {
+            if let index = merged.firstIndex(where: { $0.id == thread.id }) {
+                merged[index] = thread
+            } else {
+                merged.append(thread)
+            }
+        }
+        merged.sort { $0.updatedAt > $1.updatedAt }
+        if merged.count > Self.historyLimit { merged.removeLast(merged.count - Self.historyLimit) }
+
+        historyLoaded = true
+        deletedBeforeLoad = []
+        clearedBeforeLoad = false
+        chats = merged
+        if merged != saved { writeChats() }
+    }
+
     func resumePendingIfNeeded() {
         guard resumeOnActive, !isBusy, !isInBackground, auth.isSignedIn else { return }
         resumeInterrupted()
@@ -810,9 +879,13 @@ final class ChatStore {
 
     private func saveConversation(title: String? = nil) {
         let kept = messages.filter { !$0.text.isEmpty }
-        let keptTitle = title ?? chats.first { $0.id == conversationID && $0.isFromGPT }?.title
-        chats.removeAll { $0.id == conversationID }
-        if let thread = ChatThread(id: conversationID, messages: kept, title: keptTitle) {
+        let index = chats.firstIndex { $0.id == conversationID }
+        if let index, title == nil, chats[index].messages == kept { return }
+        let keptTitle = title ?? index.flatMap { chats[$0].isFromGPT ? chats[$0].title : nil }
+        let thread = ChatThread(id: conversationID, messages: kept, title: keptTitle)
+        if index == nil, thread == nil { return }
+        if let index { chats.remove(at: index) }
+        if let thread {
             chats.insert(thread, at: 0)
             chats.sort { $0.updatedAt > $1.updatedAt }
             if chats.count > Self.historyLimit { chats.removeLast(chats.count - Self.historyLimit) }
@@ -821,8 +894,12 @@ final class ChatStore {
     }
 
     private func writeChats() {
-        if let data = try? JSONEncoder().encode(chats) {
-            try? data.write(to: chatsURL, options: .atomic)
+        if let latest = chats.first {
+            DiskWriter.shared.writeJSON(latest, to: Self.latestChatURL)
+        } else {
+            DiskWriter.shared.remove(Self.latestChatURL)
         }
+        guard historyLoaded else { return }
+        DiskWriter.shared.writeJSON(chats, to: Self.chatsURL)
     }
 }

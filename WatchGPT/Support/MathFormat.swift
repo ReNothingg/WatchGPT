@@ -1196,17 +1196,17 @@ struct MathRichText: View {
     var body: some View {
         let blocks = MathFormat.blocks(text).flatMap(Self.paragraphs)
         if blocks.count == 1, case let .text(t) = blocks[0] {
-            Text(MathFormat.inline(t, size: fontSize))
-                .font(font)
+            InlineMathText(text: t, fontSize: fontSize, font: font)
         } else {
             VStack(alignment: .leading, spacing: (fontSize * 0.4).rounded()) {
                 ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                     switch block {
                     case let .text(t):
-                        Text(MathFormat.inline(t, size: fontSize))
-                            .font(font)
+                        InlineMathText(text: t, fontSize: fontSize, font: font)
+                            .equatable()
                     case let .math(latex):
-                        DisplayMath(latex: latex, fontSize: fontSize)
+                        DisplayMathBlock(latex: latex, fontSize: fontSize)
+                            .equatable()
                     }
                 }
             }
@@ -1215,11 +1215,58 @@ struct MathRichText: View {
     }
 
     private static func paragraphs(_ block: MathFormat.Block) -> [MathFormat.Block] {
-        guard case let .text(t) = block, !t.contains("```") else { return [block] }
-        let parts = t.split(separator: /\n(?:[ \t]*\n)+/)
-            .map { $0.trimmingCharacters(in: .newlines) }
-            .filter { !$0.isEmpty }
-        return parts.isEmpty ? [block] : parts.map { .text($0) }
+        guard case let .text(t) = block, t.contains("\n"), !t.contains("```") else { return [block] }
+        let bytes = t.utf8
+        var parts: [MathFormat.Block] = []
+        var start = bytes.startIndex
+        var i = bytes.startIndex
+        func add(upTo end: String.Index) {
+            let part = t[start..<end].trimmingCharacters(in: .newlines)
+            if !part.isEmpty { parts.append(.text(part)) }
+        }
+        while i < bytes.endIndex {
+            if bytes[i] == 10, let end = blankRunEnd(bytes, after: bytes.index(after: i)) {
+                add(upTo: i)
+                start = end
+                i = end
+            } else {
+                i = bytes.index(after: i)
+            }
+        }
+        add(upTo: bytes.endIndex)
+        return parts.isEmpty ? [block] : parts
+    }
+
+    private static func blankRunEnd(_ bytes: String.UTF8View, after: String.Index) -> String.Index? {
+        var end: String.Index?
+        var j = after
+        while true {
+            var k = j
+            while k < bytes.endIndex, bytes[k] == 32 || bytes[k] == 9 { k = bytes.index(after: k) }
+            guard k < bytes.endIndex, bytes[k] == 10 else { return end }
+            j = bytes.index(after: k)
+            end = j
+        }
+    }
+}
+
+private struct InlineMathText: View, Equatable {
+    let text: String
+    let fontSize: CGFloat
+    let font: Font
+
+    var body: some View {
+        Text(MathFormat.inline(text, size: fontSize))
+            .font(font)
+    }
+}
+
+private struct DisplayMathBlock: View, Equatable {
+    let latex: String
+    let fontSize: CGFloat
+
+    var body: some View {
+        DisplayMath(latex: latex, fontSize: fontSize)
     }
 }
 

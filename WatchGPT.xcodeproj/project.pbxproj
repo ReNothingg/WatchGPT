@@ -30,6 +30,7 @@
 		B2D1F0A0000000000000A008 /* DiagnosticsLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A007 /* DiagnosticsLog.swift */; };
 		B2D1F0A0000000000000A00A /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A009 /* DiagnosticsView.swift */; };
 		B2D1F0A0000000000000A00C /* Handoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A00B /* Handoff.swift */; };
+		B2D1F0A0000000000000A00E /* DiskWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A00D /* DiskWriter.swift */; };
 		ADFD3610F2074339E2F7F517 /* Dictation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE51DBDDA13349CC02222952 /* Dictation.swift */; };
 		B60C7F69B8FAC56865CE8C42 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44ABD7AB089EE540B1B74190 /* Theme.swift */; };
 		BDA1D48A63A77F87933F9B95 /* WatchGPTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEF414E91D31787E93F3570 /* WatchGPTApp.swift */; };
@@ -104,6 +105,7 @@
 		B2D1F0A0000000000000A007 /* DiagnosticsLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLog.swift; sourceTree = "<group>"; };
 		B2D1F0A0000000000000A009 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		B2D1F0A0000000000000A00B /* Handoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Handoff.swift; sourceTree = "<group>"; };
+		B2D1F0A0000000000000A00D /* DiskWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskWriter.swift; sourceTree = "<group>"; };
 		AE51DBDDA13349CC02222952 /* Dictation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dictation.swift; sourceTree = "<group>"; };
 		BD4CB45C3CC31D512A6F75DD /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		BD88E2C682B68B006F0AEAA8 /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
@@ -218,6 +220,7 @@
 				B2D1F0A0000000000000A005 /* Power.swift */,
 				B2D1F0A0000000000000A007 /* DiagnosticsLog.swift */,
 				B2D1F0A0000000000000A00B /* Handoff.swift */,
+				B2D1F0A0000000000000A00D /* DiskWriter.swift */,
 				AE51DBDDA13349CC02222952 /* Dictation.swift */,
 				68B0B96675C5305620AC8BD0 /* MathFormat.swift */,
 				2C6470A349E101E02193BC28 /* QRCode.swift */,
@@ -391,6 +394,7 @@
 				B2D1F0A0000000000000A008 /* DiagnosticsLog.swift in Sources */,
 				B2D1F0A0000000000000A00A /* DiagnosticsView.swift in Sources */,
 				B2D1F0A0000000000000A00C /* Handoff.swift in Sources */,
+				B2D1F0A0000000000000A00E /* DiskWriter.swift in Sources */,
 				ADFD3610F2074339E2F7F517 /* Dictation.swift in Sources */,
 				5F6F8BEC1F5BF71993E76856 /* Keychain.swift in Sources */,
 				1FDC136DB8A01E9D4618C7A7 /* MathFormat.swift in Sources */,

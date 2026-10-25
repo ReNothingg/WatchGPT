@@ -41,6 +41,24 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         [primary, secondary].compactMap { $0 }.min { $0.remainingPercent(at: date) < $1.remainingPercent(at: date) }
     }
 
+    var ignoringTimestamp: UsageSnapshot {
+        var copy = self
+        copy.updatedAt = .distantPast
+        return copy
+    }
+
+    var forWidget: UsageSnapshot {
+        func normalized(_ window: UsageWindow?) -> UsageWindow? {
+            guard let window else { return nil }
+            return UsageWindow(
+                usedPercent: window.usedPercent.rounded(),
+                windowMinutes: window.windowMinutes,
+                resetAt: window.resetAt.map { Date(timeIntervalSince1970: ($0.timeIntervalSince1970 / 60).rounded(.up) * 60) }
+            )
+        }
+        return UsageSnapshot(primary: normalized(primary), secondary: normalized(secondary), updatedAt: .distantPast)
+    }
+
     /// Merges a partial update (e.g. from response headers) over the previous value.
     func merged(with newer: UsageSnapshot) -> UsageSnapshot {
         UsageSnapshot(
@@ -73,24 +91,21 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
 struct WidgetSnapshot: Codable, Equatable, Sendable {
     var signedIn: Bool = false
     var usage: UsageSnapshot?
-    var modelName: String?
-    var lastAnswer: String?
 }
 
 enum SharedStore {
     static let snapshotKey = "widget.snapshot.v1"
+    static let widgetKind = "WatchGPTAsk"
     static let deepLinkAsk = URL(string: "watchgpt://ask")!
     static let deepLinkOpen = URL(string: "watchgpt://open")!
 
     /// App Group id comes from Info.plist (`AppGroupID`, set from the APP_GROUP build setting).
-    static var groupID: String? {
-        Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as? String
-    }
+    static let groupID: String? = Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as? String
 
-    static var defaults: UserDefaults {
+    static let defaults: UserDefaults = {
         if let id = groupID, let d = UserDefaults(suiteName: id) { return d }
         return .standard
-    }
+    }()
 
     static func load() -> WidgetSnapshot {
         guard let data = defaults.data(forKey: snapshotKey),

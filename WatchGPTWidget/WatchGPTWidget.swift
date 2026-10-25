@@ -56,7 +56,7 @@ struct AskProvider: TimelineProvider {
             }
         }
         let entries = dates.sorted().map { AskEntry(date: $0, snapshot: snapshot) }
-        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(30 * 60))))
+        completion(Timeline(entries: entries, policy: .never))
     }
 }
 
@@ -67,15 +67,14 @@ extension WidgetSnapshot {
             primary: UsageWindow(usedPercent: 18, windowMinutes: 300, resetAt: .now.addingTimeInterval(7200)),
             secondary: UsageWindow(usedPercent: 36, windowMinutes: 10080, resetAt: .now.addingTimeInterval(3 * 86400)),
             planType: "plus"
-        ),
-        modelName: "GPT-6.1-Sol"
+        )
     )
 }
 
 // MARK: Widget
 
 struct AskWidget: Widget {
-    let kind = "WatchGPTAsk"
+    let kind = SharedStore.widgetKind
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: AskProvider()) { entry in

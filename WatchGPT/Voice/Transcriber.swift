@@ -77,6 +77,18 @@ enum Transcriber {
     "синус альфа" → "sin α", "a over b" → "a/b", "H two O" → "H₂O". Keep ordinary speech as plain text.
     """
 
+    static let whisperPrompt = """
+    The speaker is whispering very quietly in a silent room, close to the microphone. \
+    Listen carefully and transcribe the whispered words exactly. \
+    Do not invent words or add phrases that were not spoken.
+    """ + " " + prompt
+
+    struct Audio: Sendable {
+        var data: Data
+        var filename: String
+        var mimeType: String
+    }
+
     private static let chatgptBlockedKey = "voice.chatgptBlockedUntil"
 
     @MainActor
@@ -85,17 +97,34 @@ enum Transcriber {
         engine: VoiceEngine,
         model: TranscribeModel,
         language: String,
+        whisper: Bool = false,
         auth: AuthService
     ) async throws -> Result {
-        let audio = try Data(contentsOf: fileURL)
+        let isWav = fileURL.pathExtension.lowercased() == "wav"
+        let audio = Audio(
+            data: try Data(contentsOf: fileURL),
+            filename: fileURL.lastPathComponent,
+            mimeType: isWav ? "audio/wav" : "audio/mp4"
+        )
+        let chosenModel = whisper ? TranscribeModel.best : model
+        let chosenPrompt = whisper ? whisperPrompt : prompt
 
         switch engine {
         case .chatgpt:
             return try await viaChatGPT(audio, language: language, auth: auth)
         case .openai:
-            return try await viaOpenAI(audio, model: model, language: language, auth: auth)
+            return try await viaOpenAI(audio, model: chosenModel, prompt: chosenPrompt, language: language, auth: auth)
         case .auto, .apple:
             let hasKey = auth.apiKey != nil
+            if whisper, hasKey {
+                do {
+                    return try await viaOpenAI(audio, model: chosenModel, prompt: chosenPrompt, language: language, auth: auth)
+                } catch let error as URLError {
+                    throw error
+                } catch {
+                    return try await viaChatGPT(audio, language: language, auth: auth)
+                }
+            }
             let blockedUntil = UserDefaults.standard.object(forKey: chatgptBlockedKey) as? Date ?? .distantPast
             var chatgptError: Error?
             if !hasKey || blockedUntil < .now {
@@ -109,7 +138,7 @@ enum Transcriber {
                 }
             }
             do {
-                return try await viaOpenAI(audio, model: model, language: language, auth: auth)
+                return try await viaOpenAI(audio, model: chosenModel, prompt: chosenPrompt, language: language, auth: auth)
             } catch let error as URLError {
                 throw error
             } catch OAuth.Failure.noAPIOrganization {
@@ -132,13 +161,13 @@ enum Transcriber {
     static let desktopVersion = "26.429.30905"
 
     @MainActor
-    private static func viaChatGPT(_ audio: Data, language: String, auth: AuthService) async throws -> Result {
+    private static func viaChatGPT(_ audio: Audio, language: String, auth: AuthService) async throws -> Result {
         var tokens = try await auth.validTokens()
         var refreshed = false
 
         while true {
             var form = MultipartForm()
-            form.addFile(name: "file", filename: "dictation.m4a", mimeType: "audio/mp4", data: audio)
+            form.addFile(name: "file", filename: audio.filename, mimeType: audio.mimeType, data: audio.data)
             if language != "auto" { form.addField(name: "language", value: language) }
 
             var request = URLRequest(url: ChatGPTClient.baseURL.appending(path: "transcribe"))
@@ -171,7 +200,7 @@ enum Transcriber {
     // MARK: OpenAI speech-to-text
 
     @MainActor
-    private static func viaOpenAI(_ audio: Data, model: TranscribeModel, language: String, auth: AuthService) async throws -> Result {
+    private static func viaOpenAI(_ audio: Audio, model: TranscribeModel, prompt: String, language: String, auth: AuthService) async throws -> Result {
         var key = try await auth.ensureAPIKey()
         var retriedKey = false
 
@@ -181,7 +210,7 @@ enum Transcriber {
             form.addField(name: "response_format", value: "json")
             form.addField(name: "prompt", value: prompt)
             if language != "auto" { form.addField(name: "language", value: language) }
-            form.addFile(name: "file", filename: "dictation.m4a", mimeType: "audio/mp4", data: audio)
+            form.addFile(name: "file", filename: audio.filename, mimeType: audio.mimeType, data: audio.data)
 
             var request = URLRequest(url: URL(string: "https://api.openai.com/v1/audio/transcriptions")!)
             request.httpMethod = "POST"

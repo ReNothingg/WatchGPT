@@ -52,6 +52,7 @@ final class ChatStore {
     }
     var transcribeModel: TranscribeModel { didSet { defaults.set(transcribeModel.rawValue, forKey: Keys.transcribeModel) } }
     var voiceLanguage: String { didSet { defaults.set(voiceLanguage, forKey: Keys.voiceLanguage) } }
+    var whisperMode: Bool { didSet { defaults.set(whisperMode, forKey: Keys.whisperMode) } }
     @ObservationIgnored private var voiceTask: Task<Void, Never>?
     @ObservationIgnored private var pendingRecording: URL?
 
@@ -81,6 +82,7 @@ final class ChatStore {
         static let voiceEngine = "settings.voiceEngine"
         static let transcribeModel = "settings.transcribeModel"
         static let voiceLanguage = "settings.voiceLanguage"
+        static let whisperMode = "settings.whisperMode"
         static let models = "cache.models"
         static let effortOverrides = "cache.effortOverrides"
         static let usage = "cache.usage"
@@ -98,6 +100,7 @@ final class ChatStore {
         voiceEngine = d.string(forKey: Keys.voiceEngine).flatMap(VoiceEngine.init(rawValue:)) ?? .auto
         transcribeModel = d.string(forKey: Keys.transcribeModel).flatMap(TranscribeModel.init(rawValue:)) ?? .best
         voiceLanguage = d.string(forKey: Keys.voiceLanguage) ?? "auto"
+        whisperMode = d.object(forKey: Keys.whisperMode) as? Bool ?? false
         Transcriber.resetChatGPTAvailability()
 
         effortOverrides = (d.dictionary(forKey: Keys.effortOverrides) as? [String: [String]]) ?? [:]
@@ -138,7 +141,7 @@ final class ChatStore {
         voiceTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.recorder.start()
+                try await self.recorder.start(whisper: self.whisperMode)
                 WKInterfaceDevice.current().play(.start)
             } catch {
                 self.voicePhase = .failed(Self.describe(error))
@@ -204,12 +207,19 @@ final class ChatStore {
         voicePhase = .transcribing
         voiceTask = Task { [weak self] in
             guard let self else { return }
+            var file = url
+            if file.pathExtension.lowercased() == "wav" {
+                file = await AudioBoost.prepare(file)
+                guard !Task.isCancelled else { return }
+                self.pendingRecording = file
+            }
             do {
                 let result = try await Transcriber.transcribe(
-                    fileURL: url,
+                    fileURL: file,
                     engine: self.voiceEngine,
                     model: self.transcribeModel,
                     language: self.voiceLanguage,
+                    whisper: self.whisperMode,
                     auth: self.auth
                 )
                 guard !Task.isCancelled else { return }

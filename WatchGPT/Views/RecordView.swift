@@ -8,6 +8,7 @@ struct RecordView: View {
         NavigationStack {
             content
         }
+        .interactiveDismissDisabled()
     }
 
     private var isFailed: Bool {
@@ -115,12 +116,22 @@ private struct LiveContent: View {
     }
 }
 
+private final class SwipeGuard {
+    var lastMove: Date?
+
+    var recentlySwiped: Bool {
+        lastMove.map { Date.now.timeIntervalSince($0) < 0.5 } ?? false
+    }
+}
+
 private struct LiveSendButton: View {
     @Environment(ChatStore.self) private var store
     let processing: Bool
+    @State private var swipe = SwipeGuard()
 
     var body: some View {
         Button {
+            guard !swipe.recentlySwiped else { return }
             store.finishVoice()
         } label: {
             ZStack {
@@ -144,6 +155,10 @@ private struct LiveSendButton: View {
             .contentShape(Circle().scale(0.6))
         }
         .buttonStyle(PressableStyle(scale: 0.9))
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { [swipe] _ in swipe.lastMove = .now }
+        )
         .doubleTapAction(isEnabled: store.recorder.isActive && !processing)
         .allowsHitTesting(store.recorder.isActive && !processing)
         .accessibilityLabel("Отправить")

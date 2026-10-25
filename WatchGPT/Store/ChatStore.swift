@@ -11,12 +11,15 @@ final class ChatStore {
     let auth: AuthService
     let speaker = Speaker()
     let gptHistory: GPTHistory
+    private let keepAlive = KeepAlive()
 
     var path: [Route] = []
 
     private(set) var messages: [ChatMessage] = []
     private(set) var chats: [ChatThread] = []
-    private(set) var status: Status = .idle
+    private(set) var status: Status = .idle {
+        didSet { if status != oldValue { updateKeepAlive() } }
+    }
     private(set) var usage: UsageSnapshot?
     private(set) var models: [ModelOption] = ModelOption.fallback
     @ObservationIgnored private var effortOverrides: [String: [String]] = [:]
@@ -50,7 +53,9 @@ final class ChatStore {
     enum VoicePhase: Equatable { case idle, recording, transcribing, failed(String) }
     let recorder = AudioRecorder()
     let playback = RecordingPlayer()
-    private(set) var voicePhase: VoicePhase = .idle
+    private(set) var voicePhase: VoicePhase = .idle {
+        didSet { if voicePhase != oldValue { updateKeepAlive() } }
+    }
     private(set) var lastVoiceLabel: String?
     private(set) var lastRecording: URL?
     private(set) var lastTranscript: String?
@@ -85,6 +90,8 @@ final class ChatStore {
     @ObservationIgnored private var historyLoaded = false
     @ObservationIgnored private var deletedBeforeLoad: Set<String> = []
     @ObservationIgnored private var clearedBeforeLoad = false
+    @ObservationIgnored private var pendingOpenChatID: String?
+    @ObservationIgnored private var widgetAnswer: WidgetAnswer?
     private let defaults = UserDefaults.standard
 
     private enum Keys {
@@ -136,6 +143,9 @@ final class ChatStore {
             usage = try? JSONDecoder().decode(UsageSnapshot.self, from: data)
         }
         loadConversation()
+        let shared = SharedStore.load()
+        publishedWidget = shared
+        widgetAnswer = shared.lastAnswer
     }
 
     var selectedModel: ModelOption {
@@ -373,6 +383,7 @@ final class ChatStore {
 
     func sceneBecameActive() {
         isInBackground = false
+        updateKeepAlive()
         if isBusy {
             guard interruptedInBackground, !didAutoResume,
                   Date.now.timeIntervalSince(lastStreamActivity) > 15 else { return }
@@ -389,6 +400,16 @@ final class ChatStore {
         guard !didAutoResume, !isInBackground else { return }
         didAutoResume = true
         resend()
+    }
+
+    private func updateKeepAlive() {
+        let working = status != .idle || voicePhase == .recording || voicePhase == .transcribing
+        if working {
+            keepAlive.hold()
+        } else {
+            let looking = WKApplication.shared().applicationState == .active
+            keepAlive.release(after: looking ? .seconds(2) : .seconds(120))
+        }
     }
 
     private static func isTransient(_ error: Error) -> Bool {
@@ -450,6 +471,7 @@ final class ChatStore {
         }
         chats.removeAll { $0.id == id }
         if !historyLoaded { deletedBeforeLoad.insert(id) }
+        if widgetAnswer?.chatID == id { widgetAnswer = nil }
         writeChats()
         publishWidget()
     }
@@ -461,6 +483,7 @@ final class ChatStore {
         conversationID = UUID().uuidString
         scrollTarget = nil
         chats = []
+        widgetAnswer = nil
         if !historyLoaded {
             clearedBeforeLoad = true
             deletedBeforeLoad = []
@@ -541,6 +564,7 @@ final class ChatStore {
                     WKInterfaceDevice.current().play(.failure)
                 } else {
                     DiagnosticsLog.shared.markSuccess()
+                    widgetAnswer = makeWidgetAnswer(replyID: replyID, chatID: chatID) ?? widgetAnswer
                     WKInterfaceDevice.current().play(.success)
                     if autoSpeak && !siriRequest { speaker.speak(text(of: replyID)) }
                 }
@@ -650,7 +674,31 @@ final class ChatStore {
 
     func handle(url: URL) {
         guard url.scheme == "watchgpt" else { return }
-        if url.host == "ask" { pendingAsk = true }
+        switch url.host {
+        case "ask":
+            pendingAsk = true
+        case "open":
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            if let chatID = components?.queryItems?.first(where: { $0.name == "chat" })?.value {
+                openFromLink(chatID)
+            }
+        case "usage":
+            guard auth.isSignedIn, voicePhase == .idle else { return }
+            path = [.usage]
+        default:
+            break
+        }
+    }
+
+    private func openFromLink(_ id: String) {
+        guard auth.isSignedIn, voicePhase == .idle else { return }
+        path = []
+        guard id != conversationID, !isBusy else { return }
+        if chats.contains(where: { $0.id == id }) {
+            openChat(id)
+        } else if !historyLoaded {
+            pendingOpenChatID = id
+        }
     }
 
     private static let usageMaxAge: TimeInterval = 120
@@ -793,12 +841,37 @@ final class ChatStore {
     // MARK: Widget
 
     func publishWidget() {
-        let snapshot = WidgetSnapshot(signedIn: auth.isSignedIn, usage: usage?.forWidget)
+        let snapshot = WidgetSnapshot(
+            signedIn: auth.isSignedIn,
+            usage: usage?.forWidget,
+            lastAnswer: auth.isSignedIn ? widgetAnswer : nil
+        )
         let previous = publishedWidget ?? SharedStore.load()
         publishedWidget = snapshot
         guard snapshot != previous else { return }
         SharedStore.save(snapshot)
-        WidgetCenter.shared.reloadTimelines(ofKind: SharedStore.widgetKind)
+
+        var kinds: Set<String> = []
+        if snapshot.signedIn != previous.signedIn || snapshot.usage != previous.usage {
+            kinds.formUnion([SharedStore.askWidgetKind, SharedStore.limitsWidgetKind])
+        }
+        if snapshot.signedIn != previous.signedIn || snapshot.lastAnswer != previous.lastAnswer {
+            kinds.insert(SharedStore.answerWidgetKind)
+        }
+        for kind in kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
+    }
+
+    private func makeWidgetAnswer(replyID: UUID, chatID: String) -> WidgetAnswer? {
+        guard let index = messages.lastIndex(where: { $0.id == replyID }) else { return nil }
+        let answer = Self.widgetText(messages[index].text, limit: 300)
+        guard !answer.isEmpty else { return nil }
+        let question = messages[..<index].last { $0.role == .user && $0.refine == nil }?.text ?? ""
+        return WidgetAnswer(question: Self.widgetText(question, limit: 80), answer: answer, date: .now, chatID: chatID)
+    }
+
+    private static func widgetText(_ text: String, limit: Int) -> String {
+        let flat = Speaker.plain(text).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return flat.count > limit ? String(flat.prefix(limit)) + "…" : flat
     }
 
     // MARK: Persistence
@@ -874,6 +947,10 @@ final class ChatStore {
         clearedBeforeLoad = false
         chats = merged
         if merged != saved { writeChats() }
+        if let id = pendingOpenChatID {
+            pendingOpenChatID = nil
+            openFromLink(id)
+        }
     }
 
     func resumePendingIfNeeded() {

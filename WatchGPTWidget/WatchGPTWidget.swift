@@ -5,6 +5,8 @@ import WidgetKit
 struct WatchGPTWidgets: WidgetBundle {
     var body: some Widget {
         AskWidget()
+        AnswerWidget()
+        LimitsWidget()
         if #available(watchOS 26.0, *) {
             AskControl()
         }
@@ -74,7 +76,7 @@ extension WidgetSnapshot {
 // MARK: Widget
 
 struct AskWidget: Widget {
-    let kind = SharedStore.widgetKind
+    let kind = SharedStore.askWidgetKind
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: AskProvider()) { entry in

@@ -91,13 +91,30 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
 struct WidgetSnapshot: Codable, Equatable, Sendable {
     var signedIn: Bool = false
     var usage: UsageSnapshot?
+    var lastAnswer: WidgetAnswer?
+}
+
+struct WidgetAnswer: Codable, Equatable, Sendable {
+    var question: String
+    var answer: String
+    var date: Date
+    var chatID: String
 }
 
 enum SharedStore {
     static let snapshotKey = "widget.snapshot.v1"
-    static let widgetKind = "WatchGPTAsk"
+    static let askWidgetKind = "WatchGPTAsk"
+    static let answerWidgetKind = "WatchGPTAnswer"
+    static let limitsWidgetKind = "WatchGPTLimits"
     static let deepLinkAsk = URL(string: "watchgpt://ask")!
     static let deepLinkOpen = URL(string: "watchgpt://open")!
+    static let deepLinkUsage = URL(string: "watchgpt://usage")!
+
+    static func deepLink(chatID: String) -> URL {
+        var components = URLComponents(url: deepLinkOpen, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "chat", value: chatID)]
+        return components.url ?? deepLinkOpen
+    }
 
     /// App Group id comes from Info.plist (`AppGroupID`, set from the APP_GROUP build setting).
     static let groupID: String? = Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as? String

@@ -42,6 +42,9 @@ final class ChatStore {
     var conciseAnswers: Bool { didSet { defaults.set(conciseAnswers, forKey: Keys.concise) } }
     var fastMode: Bool { didSet { defaults.set(fastMode, forKey: Keys.fast) } }
     var handoff: Bool { didSet { defaults.set(handoff, forKey: Handoff.defaultsKey) } }
+    var answerFontScale: Double { didSet { defaults.set(answerFontScale, forKey: Keys.answerFontScale) } }
+
+    static let answerFontScales: [Double] = [0.8, 0.9, 1.0, 1.15, 1.3, 1.5]
 
     // Voice input
     enum VoicePhase: Equatable { case idle, recording, transcribing, failed(String) }
@@ -91,6 +94,7 @@ final class ChatStore {
         static let transcribeModel = "settings.transcribeModel"
         static let voiceLanguage = "settings.voiceLanguage"
         static let whisperMode = "settings.whisperMode"
+        static let answerFontScale = "settings.answerFontScale"
         static let models = "cache.models"
         static let effortOverrides = "cache.effortOverrides"
         static let usage = "cache.usage"
@@ -111,6 +115,7 @@ final class ChatStore {
         transcribeModel = d.string(forKey: Keys.transcribeModel).flatMap(TranscribeModel.init(rawValue:)) ?? .best
         voiceLanguage = d.string(forKey: Keys.voiceLanguage) ?? "auto"
         whisperMode = d.object(forKey: Keys.whisperMode) as? Bool ?? false
+        answerFontScale = d.object(forKey: Keys.answerFontScale) as? Double ?? 1.0
         Transcriber.resetChatGPTAvailability()
 
         effortOverrides = (d.dictionary(forKey: Keys.effortOverrides) as? [String: [String]]) ?? [:]

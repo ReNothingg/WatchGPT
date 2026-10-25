@@ -30,9 +30,11 @@ struct HistoryView: View {
     var body: some View {
         List {
             Section {
-                HistorySourcePicker(source: $source)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                HistorySourcePicker(source: $source, loading: store.gptHistory.isLoading) { item in
+                    if item == .gpt { Task { await store.gptHistory.refresh(force: true) } }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             }
 
             switch source {
@@ -42,6 +44,7 @@ struct HistoryView: View {
                 GPTHistorySections(appeared: appeared)
             }
         }
+        .listSectionSpacing(.compact)
         .animation(.snappy(duration: 0.3), value: store.chats.map(\.id))
         .animation(.snappy(duration: 0.3), value: store.gptHistory.chats.map(\.id))
         .navigationTitle(source == .gpt ? "ChatGPT" : "Чаты")
@@ -75,6 +78,8 @@ struct HistoryView: View {
 
 private struct HistorySourcePicker: View {
     @Binding var source: HistorySource
+    let loading: Bool
+    let onTap: (HistorySource) -> Void
     @Namespace private var selection
 
     var body: some View {
@@ -82,13 +87,19 @@ private struct HistorySourcePicker: View {
             ForEach(HistorySource.allCases) { item in
                 let selected = item == source
                 Button {
-                    guard !selected else { return }
                     WKHaptics.click()
-                    withAnimation(.snappy(duration: 0.3)) { source = item }
+                    if !selected {
+                        withAnimation(.snappy(duration: 0.3)) { source = item }
+                    }
+                    onTap(item)
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 10, weight: .semibold))
+                        if item == .gpt && loading {
+                            SpinningIcon()
+                        } else {
+                            Image(systemName: item.icon)
+                                .font(.system(size: 10, weight: .semibold))
+                        }
                         Text(item.title)
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .lineLimit(1)
@@ -114,7 +125,6 @@ private struct HistorySourcePicker: View {
         .padding(3)
         .background(Capsule().fill(Theme.surface))
         .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
-        .padding(.bottom, 4)
     }
 }
 
@@ -224,8 +234,6 @@ private struct GPTHistorySections: View {
                     }
                     .listRowBackground(Color.clear)
                 }
-            } header: {
-                SyncHeader(syncedAt: history.syncedAt, loading: history.isLoading)
             }
 
             Section {
@@ -237,11 +245,17 @@ private struct GPTHistorySections: View {
                 .disabled(history.isLoading)
                 .listRowBackground(Color.clear)
             } footer: {
-                Text("Чаты из вашего аккаунта ChatGPT. Продолжение на часах сохраняется только на часах.")
+                Text(footerText)
                     .font(.caption2)
                     .foregroundStyle(Theme.secondaryText)
             }
         }
+    }
+
+    private var footerText: String {
+        let note = "Продолжение на часах сохраняется только на часах."
+        guard let syncedAt = history.syncedAt else { return note }
+        return "Обновлено \(ChatDate.short(syncedAt).lowercased()). \(note)"
     }
 
     @ViewBuilder
@@ -279,22 +293,17 @@ private struct SectionTitle: View {
     }
 }
 
-private struct SyncHeader: View {
-    let syncedAt: Date?
-    let loading: Bool
+private struct SpinningIcon: View {
+    @State private var spinning = false
 
     var body: some View {
-        HStack(spacing: 5) {
-            if loading {
-                Spinner(size: 9, lineWidth: 1.5)
-                SectionTitle(text: "Обновляю…")
-            } else if let syncedAt {
-                SectionTitle(text: "Обновлено \(ChatDate.short(syncedAt).lowercased())")
-            } else {
-                SectionTitle(text: "Чаты ChatGPT")
+        Image(systemName: "arrow.clockwise")
+            .font(.system(size: 10, weight: .bold))
+            .rotationEffect(.degrees(spinning ? 360 : 0))
+            .onAppear {
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) { spinning = true }
             }
-        }
-        .animation(.snappy(duration: 0.25), value: loading)
+            .accessibilityLabel("Обновляю")
     }
 }
 

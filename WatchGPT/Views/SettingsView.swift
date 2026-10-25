@@ -47,6 +47,8 @@ struct SettingsView: View {
                     ToggleTile(title: "На iPhone", icon: "iphone.and.arrow.forward", isOn: $store.handoff)
                 }
 
+                AnswerFontCard(scale: $store.answerFontScale)
+
                 SettingsCard {
                     NavigationLink(value: Route.voice) {
                         SettingsRow(title: "Голос") {
@@ -165,6 +167,64 @@ private struct ToggleTile: View {
         .accessibilityLabel(title)
         .accessibilityValue(isOn ? "включено" : "выключено")
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private struct AnswerFontCard: View {
+    @Binding var scale: Double
+
+    private let scales = ChatStore.answerFontScales
+    private var index: Int {
+        scales.firstIndex(of: scale) ?? scales.firstIndex(of: 1.0) ?? 0
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text("Шрифт ответа")
+                    .font(.footnote)
+                Spacer(minLength: 4)
+                Text(Theme.percent(scale * 100))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(scale == 1 ? Theme.secondaryText : Theme.accent)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            MarkdownText(text: "Так будет выглядеть ответ.", scale: scale)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.5)
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+            HStack(spacing: 6) {
+                stepButton(icon: "textformat.size.smaller", label: "Уменьшить шрифт", delta: -1)
+                stepButton(icon: "textformat.size.larger", label: "Увеличить шрифт", delta: 1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func stepButton(icon: String, label: String, delta: Int) -> some View {
+        let target = index + delta
+        let enabled = scales.indices.contains(target)
+        return Button {
+            guard enabled else { return }
+            withAnimation(.snappy(duration: 0.2)) { scale = scales[target] }
+            WKHaptics.click()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(enabled ? .white : Theme.secondaryText.opacity(0.5))
+                .frame(maxWidth: .infinity)
+                .frame(height: 32)
+                .background(Capsule().fill(Theme.raised))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 }
 

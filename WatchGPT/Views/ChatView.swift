@@ -255,7 +255,7 @@ private struct MessageRow: View, Equatable {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    MarkdownText(text: message.text)
+                    MarkdownText(text: message.text, scale: store.answerFontScale)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .onTapGesture(count: 2) { store.speaker.toggle(message.text) }
                     if isLast && store.status == .streaming {

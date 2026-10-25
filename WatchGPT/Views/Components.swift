@@ -313,10 +313,17 @@ private struct BusyCircle: View {
 struct MarkdownText: View {
     let text: String
     var style: Font.TextStyle = .body
+    var scale: Double = 1
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        MathRichText(text: text, fontSize: UIFont.preferredFont(forTextStyle: uiStyle).pointSize, font: .system(style))
+        let base = UIFont.preferredFont(forTextStyle: uiStyle).pointSize
+        if scale == 1 {
+            MathRichText(text: text, fontSize: base, font: .system(style))
+        } else {
+            let size = (base * scale).rounded()
+            MathRichText(text: text, fontSize: size, font: .system(size: size))
+        }
     }
 
     private var uiStyle: UIFont.TextStyle {

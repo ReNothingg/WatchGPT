@@ -195,7 +195,7 @@ private struct HistoryBubble: View {
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.bubble))
             }
         case .assistant:
-            MarkdownText(text: message.text)
+            MarkdownText(text: message.text, scale: store.answerFontScale)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onTapGesture(count: 2) { store.speaker.toggle(message.text) }
         }

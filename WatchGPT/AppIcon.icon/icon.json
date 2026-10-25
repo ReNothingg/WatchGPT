@@ -1,10 +1,5 @@
 {
-  "fill" : {
-    "linear-gradient" : [
-      "display-p3:1.00000,1.00000,1.00000,1.00000",
-      "display-p3:0.79892,0.79892,0.79892,1.00000"
-    ]
-  },
+  "fill" : "system-light",
   "groups" : [
     {
       "layers" : [
@@ -22,7 +17,7 @@
           "image-name" : "A-wave.png",
           "name" : "A-wave",
           "position" : {
-            "scale" : 1,
+            "scale" : 1.35,
             "translation-in-points" : [
               0,
               0

@@ -7,6 +7,7 @@ enum Route: Hashable {
 
 struct ChatView: View {
     @Environment(ChatStore.self) private var store
+    @State private var chromeVisible = true
 
     var body: some View {
         Group {
@@ -26,7 +27,9 @@ struct ChatView: View {
                         }
                         .padding(.bottom, 56)
                         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: store.messages.map(\.id))
+                        .reportsScrollFrame()
                     }
+                    .autoHidesChrome($chromeVisible)
                     .onChange(of: store.scrollTarget) { _, target in
                         guard let target else { return }
                         withAnimation { proxy.scrollTo(target, anchor: .top) }
@@ -61,6 +64,7 @@ struct ChatView: View {
                 }
                 ToolbarItem(placement: .bottomBar) {
                     AskButton(size: 46)
+                        .chromeVisibility(chromeVisible || store.isBusy)
                 }
             }
         }

@@ -1194,12 +1194,12 @@ struct MathRichText: View {
     let font: Font
 
     var body: some View {
-        let blocks = MathFormat.blocks(text)
+        let blocks = MathFormat.blocks(text).flatMap(Self.paragraphs)
         if blocks.count == 1, case let .text(t) = blocks[0] {
             Text(MathFormat.inline(t, size: fontSize))
                 .font(font)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: (fontSize * 0.4).rounded()) {
                 ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                     switch block {
                     case let .text(t):
@@ -1210,7 +1210,16 @@ struct MathRichText: View {
                     }
                 }
             }
+            .contentShape(Rectangle())
         }
+    }
+
+    private static func paragraphs(_ block: MathFormat.Block) -> [MathFormat.Block] {
+        guard case let .text(t) = block, !t.contains("```") else { return [block] }
+        let parts = t.split(separator: /\n(?:[ \t]*\n)+/)
+            .map { $0.trimmingCharacters(in: .newlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? [block] : parts.map { .text($0) }
     }
 }
 

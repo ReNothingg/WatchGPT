@@ -10,6 +10,7 @@ struct GPTChatView: View {
     @State private var isRefreshing = false
     @State private var visibleCount = Self.pageSize
     @State private var didScroll = false
+    @State private var chromeVisible = true
 
     private static let pageSize = 30
 
@@ -48,6 +49,7 @@ struct GPTChatView: View {
                         MicCircle(size: 46, halo: false)
                     }
                     .buttonStyle(PressableStyle())
+                    .chromeVisibility(chromeVisible)
                     .disabled(store.isBusy)
                     .accessibilityLabel("Продолжить голосом на часах")
                 }
@@ -102,7 +104,9 @@ struct GPTChatView: View {
                     footer(conversation)
                 }
                 .padding(.bottom, 56)
+                .reportsScrollFrame()
             }
+            .autoHidesChrome($chromeVisible)
             .onAppear {
                 guard !didScroll, let target = messages.last(where: { $0.role == .user })?.id else { return }
                 didScroll = true

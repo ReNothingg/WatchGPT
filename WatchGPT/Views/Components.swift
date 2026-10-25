@@ -338,3 +338,74 @@ struct MarkdownText: View {
         }
     }
 }
+
+private struct ScrollContentFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+}
+
+private let scrollChromeSpace = "scrollChrome"
+
+private struct ScrollChromeModifier: ViewModifier {
+    @Binding var visible: Bool
+    @State private var viewport: CGFloat = 0
+    @State private var lastY: CGFloat?
+    @State private var travel: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .coordinateSpace(name: scrollChromeSpace)
+            .background {
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { viewport = geo.size.height }
+                        .onChange(of: geo.size.height) { _, height in viewport = height }
+                }
+            }
+            .onPreferenceChange(ScrollContentFrameKey.self) { update($0) }
+    }
+
+    private func update(_ frame: CGRect) {
+        defer { lastY = frame.minY }
+        if viewport > 0, frame.maxY - viewport < 48 {
+            travel = 0
+            set(true)
+            return
+        }
+        guard let lastY else { return }
+        let delta = frame.minY - lastY
+        guard abs(delta) > 0.5 else { return }
+        if (delta > 0) != (travel > 0) { travel = 0 }
+        travel += delta
+        if travel < -28 {
+            set(false)
+        } else if travel > 28 {
+            set(true)
+        }
+    }
+
+    private func set(_ value: Bool) {
+        guard visible != value else { return }
+        withAnimation(.snappy(duration: 0.25)) { visible = value }
+    }
+}
+
+extension View {
+    func reportsScrollFrame() -> some View {
+        background {
+            GeometryReader { geo in
+                Color.clear.preference(key: ScrollContentFrameKey.self, value: geo.frame(in: .named(scrollChromeSpace)))
+            }
+        }
+    }
+
+    func autoHidesChrome(_ visible: Binding<Bool>) -> some View {
+        modifier(ScrollChromeModifier(visible: visible))
+    }
+
+    func chromeVisibility(_ visible: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .scaleEffect(visible ? 1 : 0.6)
+            .allowsHitTesting(visible)
+    }
+}

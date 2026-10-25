@@ -29,6 +29,11 @@ targets:
     sources:
       - path: WatchGPT
       - path: Shared
+      - path: Config/Base.xcconfig
+        buildPhase: none
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_BASE).watchkitapp
@@ -46,6 +51,7 @@ targets:
         WKApplication: true
         WKWatchOnly: true
         AppGroupID: $(APP_GROUP)
+        OpenAIAPIKey: $(OPENAI_API_KEY)
         NSMicrophoneUsageDescription: Микрофон нужен, чтобы вы могли задавать вопросы голосом.
         WKBackgroundModes: [audio]
         NSUserActivityTypes: [watchgpt.chat]

@@ -30,7 +30,7 @@ enum OAuth {
             case let .http(code, body): return "Ошибка входа (\(code)). \(OAuth.readableMessage(body).prefix(160))"
             case .badResponse: return "Неожиданный ответ сервера."
             case .noAPIOrganization:
-                return "У аккаунта нет API-организации OpenAI, поэтому ключ не выдаётся автоматически. Создайте её на platform.openai.com или введите свой ключ."
+                return "Вход ChatGPT не привязан к API-организации, поэтому ключ не выдаётся автоматически. Создайте ключ на platform.openai.com в нужной организации и вставьте его с iPhone."
             }
         }
     }

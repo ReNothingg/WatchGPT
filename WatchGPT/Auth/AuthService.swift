@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 
@@ -23,13 +24,24 @@ final class AuthService {
     struct StoredAPIKey: Codable, Equatable {
         var key: String
         var isManual: Bool
+        var fromBuild: Bool? = nil
     }
+
+    private static let bundledKeyFingerprint = "apikey.bundledFingerprint"
 
     private(set) var phase: Phase
     private(set) var tokens: AuthTokens?
     /// OpenAI API key for speech-to-text: obtained automatically from the ChatGPT login, or entered by hand.
     private(set) var apiKey: StoredAPIKey?
     private(set) var apiKeyError: String?
+    private(set) var keyCheck: KeyCheck = .unknown
+
+    enum KeyCheck: Equatable {
+        case unknown
+        case checking
+        case valid
+        case invalid(String)
+    }
 
     private var pairingTask: Task<Void, Never>?
     private var refreshTask: Task<AuthTokens, Error>?
@@ -41,6 +53,20 @@ final class AuthService {
         tokens = stored
         phase = stored == nil ? .signedOut : .signedIn
         apiKey = Keychain.load(StoredAPIKey.self, account: Self.apiKeyAccount)
+        applyBundledAPIKey()
+    }
+
+    private func applyBundledAPIKey() {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "OpenAIAPIKey") as? String else { return }
+        let key = raw.filter { !$0.isWhitespace && $0 != "\"" }
+        guard key.hasPrefix("sk-") else { return }
+        let fingerprint = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: Self.bundledKeyFingerprint) != fingerprint else { return }
+        defaults.set(fingerprint, forKey: Self.bundledKeyFingerprint)
+        setAPIKey(StoredAPIKey(key: key, isManual: true, fromBuild: true))
+        apiKeyError = nil
+        Task { await self.verifyAPIKey() }
     }
 
     // MARK: OpenAI API key (speech-to-text)
@@ -58,26 +84,61 @@ final class AuthService {
             let key = try await OAuth.obtainAPIKey(idToken: current.idToken)
             setAPIKey(StoredAPIKey(key: key, isManual: false))
             apiKeyError = nil
+            Task { await verifyAPIKey() }
             return key
         } catch OAuth.Failure.noAPIOrganization {
             apiKeyError = OAuth.Failure.noAPIOrganization.errorDescription
+            DiagnosticsLog.shared.record(.voice, message: "API-ключ не выдан: нет API-организации во входе ChatGPT", detail: "organization_id")
             throw OAuth.Failure.noAPIOrganization
         } catch {
-            apiKeyError = "Не удалось получить API-ключ автоматически. Можно ввести свой ключ вручную."
+            apiKeyError = "Не удалось получить API-ключ автоматически: \(error.localizedDescription)"
+            DiagnosticsLog.shared.record(.voice, error)
             throw error
         }
     }
 
     func setManualAPIKey(_ raw: String) {
-        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = raw.filter { !$0.isWhitespace && $0 != "\"" && $0 != "'" }
         guard !key.isEmpty else { return }
         setAPIKey(StoredAPIKey(key: key, isManual: true))
         apiKeyError = nil
+        Task { await verifyAPIKey() }
     }
 
     func clearAPIKey() {
         apiKey = nil
+        keyCheck = .unknown
         Keychain.delete(account: Self.apiKeyAccount)
+    }
+
+    func verifyAPIKey() async {
+        guard let key = apiKey?.key else {
+            keyCheck = .unknown
+            return
+        }
+        keyCheck = .checking
+        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models/gpt-transcribe")!)
+        request.timeoutInterval = 20
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard apiKey?.key == key else { return }
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status) {
+                keyCheck = .valid
+                return
+            }
+            let message = OAuth.readableMessage(String(decoding: data, as: UTF8.self)).prefix(140)
+            switch status {
+            case 401: keyCheck = .invalid("Ключ не подходит. \(message)")
+            case 403, 404: keyCheck = .invalid("Нет доступа к gpt-transcribe в этом проекте. \(message)")
+            default: keyCheck = .invalid("Ошибка проверки (\(status)). \(message)")
+            }
+            DiagnosticsLog.shared.record(.voice, message: "API-ключ не прошёл проверку", detail: "HTTP \(status)")
+        } catch {
+            guard apiKey?.key == key else { return }
+            keyCheck = .invalid("Не удалось проверить: \(error.localizedDescription)")
+        }
     }
 
     private func setAPIKey(_ value: StoredAPIKey) {

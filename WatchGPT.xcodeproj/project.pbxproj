@@ -116,6 +116,7 @@
 		D1A7C0DE0000000000000B02 /* ChatGPTHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTHistory.swift; sourceTree = "<group>"; };
 		D1A7C0DE0000000000000B04 /* GPTHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPTHistory.swift; sourceTree = "<group>"; };
 		D1A7C0DE0000000000000B06 /* GPTChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPTChatView.swift; sourceTree = "<group>"; };
+		A1C0FF1CE0000000000000A1 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -238,6 +239,7 @@
 		F1D95191CD50BC6379682CD5 = {
 			isa = PBXGroup;
 			children = (
+				A1C0FF1CE0000000000000A2 /* Config */,
 				FF5C4CCCCFB9CD0CAACB1102 /* Shared */,
 				3343748D4558C94F3EEEBC00 /* WatchGPT */,
 				2BA3B51E5402096361BDA99B /* WatchGPTWidget */,
@@ -253,6 +255,14 @@
 				44ABD7AB089EE540B1B74190 /* Theme.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		A1C0FF1CE0000000000000A2 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A1C0FF1CE0000000000000A1 /* Base.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -580,6 +590,7 @@
 		};
 		CE73578D11EF0443B168F2CF /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1C0FF1CE0000000000000A1 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -595,6 +606,7 @@
 		};
 		D34AF350EB64ED74449156E7 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A1C0FF1CE0000000000000A1 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

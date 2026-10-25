@@ -553,6 +553,7 @@ struct VoiceSettingsView: View {
     @Environment(ChatStore.self) private var store
     @Environment(AuthService.self) private var auth
     @State private var fetchingKey = false
+    @State private var keyDraft = ""
 
     var body: some View {
         @Bindable var store = store
@@ -620,6 +621,13 @@ struct VoiceSettingsView: View {
                     }
                     .font(.footnote)
 
+                    if let key = auth.apiKey?.key {
+                        Text("\(key.prefix(8))…\(key.suffix(4)) · \(key.count) симв.")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.secondaryText)
+                        keyCheckRow
+                    }
+
                     Button {
                         Task {
                             fetchingKey = true
@@ -631,11 +639,14 @@ struct VoiceSettingsView: View {
                     }
                     .disabled(fetchingKey)
 
-                    TextFieldLink(prompt: Text("sk-…")) {
-                        Label("Ввести свой ключ", systemImage: "keyboard")
-                    } onSubmit: { key in
-                        auth.setManualAPIKey(key)
-                    }
+                    TextField("Вставить ключ sk-…", text: $keyDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onChange(of: keyDraft) { _, value in
+                            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                            auth.setManualAPIKey(value)
+                            keyDraft = ""
+                        }
 
                     if auth.apiKey != nil {
                         Button(role: .destructive) {
@@ -655,8 +666,38 @@ struct VoiceSettingsView: View {
         .onDisappear { store.playback.stop() }
     }
 
+    @ViewBuilder
+    private var keyCheckRow: some View {
+        switch auth.keyCheck {
+        case .unknown:
+            Button {
+                Task { await auth.verifyAPIKey() }
+            } label: {
+                Label("Проверить ключ", systemImage: "checkmark.shield")
+            }
+        case .checking:
+            HStack {
+                ProgressView().frame(width: 20)
+                Text("Проверяю…").font(.footnote)
+            }
+        case .valid:
+            Label("Ключ работает", systemImage: "checkmark.circle.fill")
+                .font(.footnote)
+                .foregroundStyle(Theme.accent)
+        case let .invalid(message):
+            Button {
+                Task { await auth.verifyAPIKey() }
+            } label: {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
     private var keyStatus: String {
         guard let key = auth.apiKey else { return "нет" }
+        if key.fromBuild == true { return "из сборки" }
         return key.isManual ? "свой" : "из аккаунта"
     }
 

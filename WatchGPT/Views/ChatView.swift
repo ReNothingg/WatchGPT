@@ -27,7 +27,6 @@ struct ChatView: View {
                         }
                         .padding(.bottom, 56)
                         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: store.messages.map(\.id))
-                        .reportsScrollFrame()
                     }
                     .autoHidesChrome($chromeVisible)
                     .onChange(of: store.scrollTarget) { _, target in

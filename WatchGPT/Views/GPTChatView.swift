@@ -104,7 +104,6 @@ struct GPTChatView: View {
                     footer(conversation)
                 }
                 .padding(.bottom, 56)
-                .reportsScrollFrame()
             }
             .autoHidesChrome($chromeVisible)
             .onAppear {

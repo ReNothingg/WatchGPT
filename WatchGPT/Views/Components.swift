@@ -339,47 +339,44 @@ struct MarkdownText: View {
     }
 }
 
-private struct ScrollContentFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+private struct ScrollChromeMetrics: Equatable {
+    var offset: CGFloat
+    var remaining: CGFloat
 }
 
-private let scrollChromeSpace = "scrollChrome"
-
+@available(watchOS 11.0, *)
 private struct ScrollChromeModifier: ViewModifier {
     @Binding var visible: Bool
-    @State private var viewport: CGFloat = 0
-    @State private var lastY: CGFloat?
+    @State private var lastOffset: CGFloat?
     @State private var travel: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
-            .coordinateSpace(name: scrollChromeSpace)
-            .background {
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { viewport = geo.size.height }
-                        .onChange(of: geo.size.height) { _, height in viewport = height }
-                }
+            .onScrollGeometryChange(for: ScrollChromeMetrics.self) { geo in
+                ScrollChromeMetrics(
+                    offset: geo.contentOffset.y,
+                    remaining: geo.contentSize.height - geo.visibleRect.maxY
+                )
+            } action: { _, metrics in
+                update(metrics)
             }
-            .onPreferenceChange(ScrollContentFrameKey.self) { update($0) }
     }
 
-    private func update(_ frame: CGRect) {
-        defer { lastY = frame.minY }
-        if viewport > 0, frame.maxY - viewport < 48 {
+    private func update(_ metrics: ScrollChromeMetrics) {
+        defer { lastOffset = metrics.offset }
+        if metrics.remaining < 48 {
             travel = 0
             set(true)
             return
         }
-        guard let lastY else { return }
-        let delta = frame.minY - lastY
+        guard let lastOffset else { return }
+        let delta = metrics.offset - lastOffset
         guard abs(delta) > 0.5 else { return }
         if (delta > 0) != (travel > 0) { travel = 0 }
         travel += delta
-        if travel < -28 {
+        if travel > 28 {
             set(false)
-        } else if travel > 28 {
+        } else if travel < -28 {
             set(true)
         }
     }
@@ -391,16 +388,13 @@ private struct ScrollChromeModifier: ViewModifier {
 }
 
 extension View {
-    func reportsScrollFrame() -> some View {
-        background {
-            GeometryReader { geo in
-                Color.clear.preference(key: ScrollContentFrameKey.self, value: geo.frame(in: .named(scrollChromeSpace)))
-            }
-        }
-    }
-
+    @ViewBuilder
     func autoHidesChrome(_ visible: Binding<Bool>) -> some View {
-        modifier(ScrollChromeModifier(visible: visible))
+        if #available(watchOS 11.0, *) {
+            modifier(ScrollChromeModifier(visible: visible))
+        } else {
+            self
+        }
     }
 
     func chromeVisibility(_ visible: Bool) -> some View {

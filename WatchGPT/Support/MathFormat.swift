@@ -645,6 +645,10 @@ struct MathParser {
     private mutating func parseArg() -> MathNode {
         skipSpaces()
         if peek() == "{" { return parseGroup() }
+        if let ch = peek(), ch.isNumber {
+            i += 1
+            return .atom(String(ch), .number)
+        }
         return parsePrimary()?.0 ?? .empty
     }
 

@@ -41,54 +41,53 @@ enum MathFormat {
     }
 
     static func blocks(_ text: String) -> [Block] {
-        guard text.contains("$$") || text.contains("\\[") || text.contains("\\begin{") else { return [.text(text)] }
-        let c = Array(text)
+        guard text.containsBytes("$$") || text.containsBytes("\\[") || text.containsBytes("\\begin{") else { return [.text(text)] }
+        let c = Array(text.utf8)
         var blocks: [Block] = []
-        var buffer: [Character] = []
+        var segment = 0
         var i = 0
 
-        func flush() {
-            let s = String(buffer).trimmingCharacters(in: .whitespacesAndNewlines)
+        func string(_ from: Int, _ to: Int) -> String {
+            String(decoding: c[from..<to], as: UTF8.self)
+        }
+
+        func flush(upTo end: Int) {
+            let s = string(segment, end).trimmingCharacters(in: .whitespacesAndNewlines)
             if !s.isEmpty { blocks.append(.text(s)) }
-            buffer.removeAll()
         }
 
         while i < c.count {
             if c.has("```", at: i) {
-                let end = c.find("```", from: i + 3).map { $0 + 3 } ?? c.count
-                buffer.append(contentsOf: c[i..<end])
-                i = end
-            } else if c[i] == "`" {
-                let end = c.find("`", from: i + 1).map { $0 + 1 } ?? c.count
-                buffer.append(contentsOf: c[i..<end])
-                i = end
+                i = c.find("```", from: i + 3).map { $0 + 3 } ?? c.count
+            } else if c[i] == UInt8(ascii: "`") {
+                i = c.find("`", from: i + 1).map { $0 + 1 } ?? c.count
             } else if c.has("\\(", at: i) {
-                let end = c.find("\\)", from: i + 2).map { $0 + 2 } ?? c.count
-                buffer.append(contentsOf: c[i..<end])
-                i = end
+                i = c.find("\\)", from: i + 2).map { $0 + 2 } ?? c.count
             } else if c.has("$$", at: i) {
                 let close = c.find("$$", from: i + 2)
-                flush()
-                blocks.append(.math(String(c[(i + 2)..<(close ?? c.count)])))
+                flush(upTo: i)
+                blocks.append(.math(string(i + 2, close ?? c.count)))
                 i = close.map { $0 + 2 } ?? c.count
+                segment = i
             } else if c.has("\\[", at: i) {
                 let close = c.find("\\]", from: i + 2)
-                flush()
-                blocks.append(.math(String(c[(i + 2)..<(close ?? c.count)])))
+                flush(upTo: i)
+                blocks.append(.math(string(i + 2, close ?? c.count)))
                 i = close.map { $0 + 2 } ?? c.count
+                segment = i
             } else if c.has("\\begin{", at: i), let nameEnd = c.find("}", from: i + 7) {
-                let name = String(c[(i + 7)..<nameEnd])
-                let endTag = Array("\\end{\(name)}")
-                let close = c.find(String(endTag), from: nameEnd)
-                flush()
-                blocks.append(.math(String(c[i..<(close.map { $0 + endTag.count } ?? c.count)])))
-                i = close.map { $0 + endTag.count } ?? c.count
+                let endTag = Array("\\end{".utf8) + c[(i + 7)..<nameEnd] + [UInt8(ascii: "}")]
+                let close = c.find(endTag, from: nameEnd)
+                flush(upTo: i)
+                let end = close.map { $0 + endTag.count } ?? c.count
+                blocks.append(.math(string(i, end)))
+                i = end
+                segment = i
             } else {
-                buffer.append(c[i])
                 i += 1
             }
         }
-        flush()
+        flush(upTo: c.count)
         return blocks
     }
 
@@ -178,7 +177,7 @@ enum MathFormat {
     }
 
     private static func mask(_ text: String) -> (String, [String]) {
-        guard text.contains("\\") || text.contains("$") || text.contains("^") || text.contains("_") else { return (text, []) }
+        guard text.containsAnyByte("\\$^_") else { return (text, []) }
         let c = Array(text)
         var out: [Character] = []
         var maths: [String] = []
@@ -256,7 +255,7 @@ enum MathFormat {
             let start = i
             while i < c.count, !c[i].isWhitespace { i += 1 }
             let word = String(c[start..<i])
-            let usable = !word.contains("://") && !word.contains("@") && !word.contains("`")
+            let usable = !word.containsBytes("://") && !word.containsAnyByte("@`")
                 && !word.unicodeScalars.contains { $0.value >= placeholderBase && $0.value < placeholderBase + 0x1000 }
             let strong = usable && mayBeStrong(word) && matches(strongRegex, word)
             tokens.append((start, i, strong, usable))
@@ -387,6 +386,65 @@ enum MathFormat {
         "+": "₊", "-": "₋", "−": "₋", "=": "₌", "(": "₍", ")": "₎", "a": "ₐ", "e": "ₑ", "i": "ᵢ", "j": "ⱼ",
         "k": "ₖ", "n": "ₙ", "m": "ₘ", "x": "ₓ", "t": "ₜ", "o": "ₒ", "p": "ₚ", "s": "ₛ", "r": "ᵣ", ",": ",",
     ]
+}
+
+fileprivate extension String {
+    func containsBytes(_ needle: StaticString) -> Bool {
+        needle.withUTF8Buffer { pattern in
+            utf8.withContiguousStorageIfAvailable { Self.search(pattern, in: $0) }
+                ?? Array(utf8).withUnsafeBufferPointer { Self.search(pattern, in: $0) }
+        }
+    }
+
+    func containsAnyByte(_ bytes: StaticString) -> Bool {
+        bytes.withUTF8Buffer { set in utf8.contains { set.contains($0) } }
+    }
+
+    private static func search(_ pattern: UnsafeBufferPointer<UInt8>, in hay: UnsafeBufferPointer<UInt8>) -> Bool {
+        guard let first = pattern.first else { return true }
+        guard hay.count >= pattern.count else { return false }
+        let last = hay.count - pattern.count
+        var i = 0
+        while i <= last {
+            if hay[i] == first {
+                var j = 1
+                while j < pattern.count, hay[i + j] == pattern[j] { j += 1 }
+                if j == pattern.count { return true }
+            }
+            i += 1
+        }
+        return false
+    }
+}
+
+private extension Array where Element == UInt8 {
+    func has(_ s: StaticString, at i: Int) -> Bool {
+        s.withUTF8Buffer { has($0, at: i) }
+    }
+
+    func has<C: Collection>(_ s: C, at i: Int) -> Bool where C.Element == UInt8 {
+        guard i >= 0, i + s.count <= count else { return false }
+        var k = i
+        for byte in s {
+            if self[k] != byte { return false }
+            k += 1
+        }
+        return true
+    }
+
+    func find(_ s: StaticString, from: Int) -> Int? {
+        s.withUTF8Buffer { find($0, from: from) }
+    }
+
+    func find<C: Collection>(_ s: C, from: Int) -> Int? where C.Element == UInt8 {
+        guard from <= count else { return nil }
+        var i = from
+        while i < count {
+            if has(s, at: i) { return i }
+            i += 1
+        }
+        return nil
+    }
 }
 
 private extension Array where Element == Character {
@@ -1215,7 +1273,7 @@ struct MathRichText: View {
     }
 
     private static func paragraphs(_ block: MathFormat.Block) -> [MathFormat.Block] {
-        guard case let .text(t) = block, t.contains("\n"), !t.contains("```") else { return [block] }
+        guard case let .text(t) = block, t.containsAnyByte("\n"), !t.containsBytes("```") else { return [block] }
         let bytes = t.utf8
         var parts: [MathFormat.Block] = []
         var start = bytes.startIndex

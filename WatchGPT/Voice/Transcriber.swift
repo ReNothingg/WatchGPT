@@ -103,7 +103,7 @@ enum Transcriber {
     ) async throws -> Result {
         let isWav = fileURL.pathExtension.lowercased() == "wav"
         let audio = Audio(
-            data: try Data(contentsOf: fileURL),
+            data: try await Task.detached(priority: .userInitiated) { try Data(contentsOf: fileURL) }.value,
             filename: fileURL.lastPathComponent,
             mimeType: isWav ? "audio/wav" : "audio/mp4"
         )
@@ -168,12 +168,12 @@ enum Transcriber {
     private static func viaChatGPT(_ audio: Audio, language: String, auth: AuthService) async throws -> Result {
         var tokens = try await auth.validTokens()
         var refreshed = false
-
-        while true {
-            var form = MultipartForm()
+        let form = await MultipartForm.build { form in
             form.addFile(name: "file", filename: audio.filename, mimeType: audio.mimeType, data: audio.data)
             if language != "auto" { form.addField(name: "language", value: language) }
+        }
 
+        while true {
             var request = URLRequest(url: ChatGPTClient.baseURL.appending(path: "transcribe"))
             request.httpMethod = "POST"
             request.timeoutInterval = 60
@@ -183,7 +183,7 @@ enum Transcriber {
             request.setValue("\(desktopOriginator)/\(desktopVersion) (watchOS; arm64)", forHTTPHeaderField: "User-Agent")
             request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
 
-            let (data, response) = try await URLSession.shared.upload(for: request, from: form.finalize())
+            let (data, response) = try await URLSession.shared.upload(for: request, from: form.body)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             if status == 401, !refreshed {
                 tokens = try await auth.refresh()
@@ -207,9 +207,7 @@ enum Transcriber {
     private static func viaOpenAI(_ audio: Audio, model: TranscribeModel, prompt: String, language: String, auth: AuthService) async throws -> Result {
         var key = try await auth.ensureAPIKey()
         var retriedKey = false
-
-        while true {
-            var form = MultipartForm()
+        let form = await MultipartForm.build { form in
             form.addField(name: "model", value: model.rawValue)
             form.addField(name: "response_format", value: "json")
             form.addField(name: "prompt", value: prompt)
@@ -217,14 +215,16 @@ enum Transcriber {
                 form.addField(name: model == .best ? "languages[]" : "language", value: language)
             }
             form.addFile(name: "file", filename: audio.filename, mimeType: audio.mimeType, data: audio.data)
+        }
 
+        while true {
             var request = URLRequest(url: URL(string: "https://api.openai.com/v1/audio/transcriptions")!)
             request.httpMethod = "POST"
             request.timeoutInterval = 60
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
 
-            let (data, response) = try await URLSession.shared.upload(for: request, from: form.finalize())
+            let (data, response) = try await URLSession.shared.upload(for: request, from: form.body)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
 
@@ -276,5 +276,18 @@ struct MultipartForm {
         var result = body
         result.append(Data("--\(boundary)--\r\n".utf8))
         return result
+    }
+
+    struct Built: Sendable {
+        var body: Data
+        var contentType: String
+    }
+
+    static func build(_ fill: @escaping @Sendable (inout MultipartForm) -> Void) async -> Built {
+        await Task.detached(priority: .userInitiated) {
+            var form = MultipartForm()
+            fill(&form)
+            return Built(body: form.finalize(), contentType: form.contentType)
+        }.value
     }
 }

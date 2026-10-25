@@ -206,9 +206,10 @@ private struct GPTHistorySections: View {
                 }
             }
 
+            let localCopies = store.localGPTChatIDs
             Section {
                 ForEach(Array(history.chats.enumerated()), id: \.element.id) { index, chat in
-                    GPTChatRow(chat: chat, hasCopy: store.hasLocalCopy(ofGPTChat: chat.id)) {
+                    GPTChatRow(chat: chat, hasCopy: localCopies.contains(ChatThread.gptID(chat.id))) {
                         WKHaptics.click()
                         store.path.append(.gptChat(id: chat.id, title: chat.title))
                     }

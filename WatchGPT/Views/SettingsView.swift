@@ -297,6 +297,7 @@ struct ModelPickerView: View {
             .padding(.horizontal, 2)
         }
         .navigationTitle("Модель")
+        .task { await store.refreshModels(ifOlderThan: 600) }
     }
 }
 

@@ -163,8 +163,13 @@ final class ChatStore {
             guard let self else { return }
             do {
                 try await self.recorder.start(whisper: self.whisperMode)
+                guard !Task.isCancelled, self.voicePhase == .recording else {
+                    self.recorder.cancel()
+                    return
+                }
                 WKInterfaceDevice.current().play(.start)
             } catch {
+                guard !Task.isCancelled else { return }
                 DiagnosticsLog.shared.record(.voice, error)
                 self.voicePhase = .failed(Self.describe(error))
                 WKInterfaceDevice.current().play(.failure)
@@ -413,9 +418,8 @@ final class ChatStore {
         publishWidget()
     }
 
-    func hasLocalCopy(ofGPTChat id: String) -> Bool {
-        let localID = ChatThread.gptID(id)
-        return chats.contains { $0.id == localID }
+    var localGPTChatIDs: Set<String> {
+        Set(chats.lazy.filter(\.isFromGPT).map(\.id))
     }
 
     func continueGPTChat(_ conversation: RemoteConversation, ask: Bool) {

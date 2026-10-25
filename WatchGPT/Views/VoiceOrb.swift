@@ -4,14 +4,15 @@ enum VoiceMode: Equatable { case listening, paused, processing }
 
 struct VoiceBlob: View {
     var mode: VoiceMode
-    var level: Double
     var coreRatio: CGFloat = 0.5
+    var level: () -> Double
     @State private var engine = BlobEngine()
 
     var body: some View {
         LiveTimeline(role: .feedback) { date in
+            let current = level()
             Canvas { ctx, size in
-                engine.step(to: date, level: level, mode: mode)
+                engine.step(to: date, level: current, mode: mode)
                 BlobPainter(state: engine, coreRatio: coreRatio).draw(in: &ctx, size: size)
             }
         }
@@ -233,13 +234,14 @@ private struct BlobPainter {
 
 struct EdgeGlow: View {
     var mode: VoiceMode
-    var level: Double
+    var level: () -> Double
     @State private var engine = GlowEngine()
 
     var body: some View {
         LiveTimeline(role: .feedback) { date in
+            let current = level()
             Canvas { ctx, size in
-                engine.step(to: date, level: level, mode: mode)
+                engine.step(to: date, level: current, mode: mode)
                 GlowPainter(state: engine).draw(in: &ctx, size: size)
             }
         }

@@ -60,19 +60,13 @@ private extension ChatStore {
         if voicePhase == .transcribing { return .processing }
         return recorder.isPaused ? .paused : .listening
     }
-
-    var voiceLevel: Double {
-        let recent = recorder.levels.suffix(3)
-        guard !recent.isEmpty else { return 0 }
-        return Double(recent.reduce(0, +)) / Double(recent.count)
-    }
 }
 
 private struct LiveGlow: View {
     @Environment(ChatStore.self) private var store
 
     var body: some View {
-        EdgeGlow(mode: store.voiceMode, level: store.voiceLevel)
+        EdgeGlow(mode: store.voiceMode) { [recorder = store.recorder] in recorder.level }
     }
 }
 
@@ -130,7 +124,7 @@ private struct LiveSendButton: View {
             store.finishVoice()
         } label: {
             ZStack {
-                VoiceBlob(mode: store.voiceMode, level: store.voiceLevel, coreRatio: 0.5)
+                VoiceBlob(mode: store.voiceMode, coreRatio: 0.5) { [recorder = store.recorder] in recorder.level }
                 ZStack {
                     if processing {
                         Image(systemName: "waveform")

@@ -1,7 +1,7 @@
 import AVFoundation
 import Observation
 
-/// Records the user's voice to a small AAC file and exposes live levels for the waveform.
+/// Records the user's voice to a small AAC file and exposes the live level for the voice animation.
 @MainActor
 @Observable
 final class AudioRecorder {
@@ -17,9 +17,7 @@ final class AudioRecorder {
         }
     }
 
-    static let barCount = 24
-
-    private(set) var levels: [Float] = Array(repeating: 0, count: AudioRecorder.barCount)
+    @ObservationIgnored private(set) var level: Double = 0
     private(set) var elapsed: TimeInterval = 0
     private(set) var isRecording = false
     private(set) var isPaused = false
@@ -31,6 +29,7 @@ final class AudioRecorder {
     @ObservationIgnored private var resumedAt = Date.now
     @ObservationIgnored private var interruptionObserver: NSObjectProtocol?
     @ObservationIgnored private var isWhisper = false
+    @ObservationIgnored private var recentLevels: [Float] = []
 
     private var fileURL: URL {
         FileManager.default.temporaryDirectory.appending(path: isWhisper ? "dictation.wav" : "dictation.m4a")
@@ -40,13 +39,33 @@ final class AudioRecorder {
 
     func start(whisper: Bool = false) async throws {
         guard await Self.requestPermission() else { throw RecorderError.permissionDenied }
+        try Task.checkCancellation()
         stopMetering()
         recorder?.stop()
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: whisper ? .measurement : .default, options: [])
-        try session.setActive(true)
+        do {
+            try session.setCategory(.record, mode: whisper ? .measurement : .default, options: [])
+            try session.setActive(true)
+            try startRecording(whisper: whisper)
+        } catch {
+            recorder = nil
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            throw error
+        }
 
+        resetLevels()
+        elapsed = 0
+        recordedBeforeResume = 0
+        resumedAt = .now
+        heardSpeech = false
+        isPaused = false
+        isRecording = true
+        observeInterruptions()
+        startMetering()
+    }
+
+    private func startRecording(whisper: Bool) throws {
         isWhisper = whisper
         try? FileManager.default.removeItem(at: fileURL)
         let settings: [String: Any] = whisper ? [
@@ -67,16 +86,11 @@ final class AudioRecorder {
         recorder.isMeteringEnabled = true
         guard recorder.record() else { throw RecorderError.couldNotStart }
         self.recorder = recorder
+    }
 
-        levels = Array(repeating: 0, count: Self.barCount)
-        elapsed = 0
-        recordedBeforeResume = 0
-        resumedAt = .now
-        heardSpeech = false
-        isPaused = false
-        isRecording = true
-        observeInterruptions()
-        startMetering()
+    private func resetLevels() {
+        recentLevels = []
+        level = 0
     }
 
     func pause() {
@@ -123,7 +137,7 @@ final class AudioRecorder {
         isRecording = false
         isPaused = true
         stopMetering()
-        levels = Array(repeating: 0, count: Self.barCount)
+        resetLevels()
     }
 
     private func finish() {
@@ -177,11 +191,9 @@ final class AudioRecorder {
         let db = recorder.averagePower(forChannel: 0)
         let floor: Float = isWhisper ? -64 : -52
         let range: Float = isWhisper ? 40 : 46
-        let level = max(0, min(1, (db - floor) / range))
-        var next = levels
-        next.removeFirst()
-        next.append(level)
-        levels = next
+        recentLevels.append(max(0, min(1, (db - floor) / range)))
+        if recentLevels.count > 3 { recentLevels.removeFirst(recentLevels.count - 3) }
+        level = Double(recentLevels.reduce(0, +)) / Double(recentLevels.count)
         let seconds = currentDuration.rounded(.down)
         if seconds != elapsed { elapsed = seconds }
         if db > (isWhisper ? -48 : -36), !heardSpeech { heardSpeech = true }
@@ -347,9 +359,15 @@ final class RecordingPlayer: NSObject, AVAudioPlayerDelegate {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default, options: [])
         try? session.setActive(true)
-        guard let player = try? AVAudioPlayer(contentsOf: url) else { return }
+        guard let player = try? AVAudioPlayer(contentsOf: url) else {
+            finished()
+            return
+        }
         player.delegate = self
-        guard player.play() else { return }
+        guard player.play() else {
+            finished()
+            return
+        }
         self.player = player
         isPlaying = true
     }

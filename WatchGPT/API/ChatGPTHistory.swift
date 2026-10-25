@@ -215,13 +215,18 @@ extension ChatGPTClient {
         count == 1 ? "🖼 Изображение" : "🖼 Изображения: \(count)"
     }
 
+    private static let preciseDates: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let plainDates = ISO8601DateFormatter()
+
     static func date(_ any: Any?) -> Date? {
         if let seconds = number(any), seconds > 0 { return Date(timeIntervalSince1970: seconds) }
         guard let string = any as? String else { return nil }
-        let precise = ISO8601DateFormatter()
-        precise.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = precise.date(from: string) { return date }
-        return ISO8601DateFormatter().date(from: string)
+        return preciseDates.date(from: string) ?? plainDates.date(from: string)
     }
 }
 

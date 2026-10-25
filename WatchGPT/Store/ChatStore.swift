@@ -46,8 +46,11 @@ final class ChatStore {
     // Voice input
     enum VoicePhase: Equatable { case idle, recording, transcribing, failed(String) }
     let recorder = AudioRecorder()
+    let playback = RecordingPlayer()
     private(set) var voicePhase: VoicePhase = .idle
     private(set) var lastVoiceLabel: String?
+    private(set) var lastRecording: URL?
+    private(set) var lastTranscript: String?
     var voiceEngine: VoiceEngine {
         didSet {
             defaults.set(voiceEngine.rawValue, forKey: Keys.voiceEngine)
@@ -143,6 +146,7 @@ final class ChatStore {
     func startVoice() {
         guard !isBusy, voicePhase == .idle || isFailedVoice else { return }
         speaker.stop()
+        playback.stop()
         pendingRecording = nil
         voicePhase = .recording
         voiceTask = Task { [weak self] in
@@ -216,11 +220,12 @@ final class ChatStore {
         voiceTask = Task { [weak self] in
             guard let self else { return }
             var file = url
-            if file.pathExtension.lowercased() == "wav" {
+            if AudioBoost.needsBoost(file) {
                 file = await AudioBoost.prepare(file)
                 guard !Task.isCancelled else { return }
                 self.pendingRecording = file
             }
+            self.keepLastRecording(file)
             do {
                 let result = try await Transcriber.transcribe(
                     fileURL: file,
@@ -228,10 +233,12 @@ final class ChatStore {
                     model: self.transcribeModel,
                     language: self.voiceLanguage,
                     whisper: self.whisperMode,
+                    context: self.voiceContext,
                     auth: self.auth
                 )
                 guard !Task.isCancelled else { return }
                 self.lastVoiceLabel = result.label
+                self.lastTranscript = result.text
                 self.pendingRecording = nil
                 self.voicePhase = .idle
                 self.send(result.text)
@@ -242,6 +249,26 @@ final class ChatStore {
                 WKInterfaceDevice.current().play(.failure)
             }
         }
+    }
+
+    private func keepLastRecording(_ file: URL) {
+        playback.stop()
+        let manager = FileManager.default
+        let copy = manager.temporaryDirectory.appending(path: "last-dictation.\(file.pathExtension)")
+        if let lastRecording { try? manager.removeItem(at: lastRecording) }
+        try? manager.removeItem(at: copy)
+        lastTranscript = nil
+        lastRecording = (try? manager.copyItem(at: file, to: copy)) != nil ? copy : nil
+    }
+
+    private var voiceContext: String? {
+        let recent = messages.filter { !$0.isError && !$0.text.isEmpty }.suffix(4)
+        guard !recent.isEmpty else { return nil }
+        return recent.map { message in
+            let who = message.role == .user ? "User" : "Assistant"
+            let text = message.text.replacingOccurrences(of: "\n", with: " ")
+            return "\(who): \(text.prefix(240))"
+        }.joined(separator: "\n")
     }
 
     // MARK: Sending

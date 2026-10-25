@@ -44,7 +44,7 @@ final class AudioRecorder {
         recorder?.stop()
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .default, options: [])
+        try session.setCategory(.record, mode: whisper ? .measurement : .default, options: [])
         try session.setActive(true)
 
         isWhisper = whisper
@@ -205,6 +205,12 @@ enum AudioBoost {
     private static let chunk: AVAudioFrameCount = 8192
     private static let cutoff: Double = 90
     private static let bitRate = 64_000
+    private static let rawName = "dictation.wav"
+    private static let maxLosslessBytes: AVAudioFramePosition = 20_000_000
+
+    static func needsBoost(_ url: URL) -> Bool {
+        url.lastPathComponent == rawName
+    }
 
     static func prepare(_ url: URL) async -> URL {
         await Task.detached(priority: .userInitiated) {
@@ -222,9 +228,11 @@ enum AudioBoost {
             throw CocoaError(.fileReadCorruptFile)
         }
         let gain = try measureGain(source, buffer: buffer)
-        let output = input.deletingPathExtension().appendingPathExtension("m4a")
+        let lossless = source.length * 2 <= maxLosslessBytes
+        let output = input.deletingLastPathComponent()
+            .appending(path: lossless ? "dictation-boosted.wav" : "dictation-boosted.m4a")
         try? FileManager.default.removeItem(at: output)
-        try encode(source, buffer: buffer, gain: gain, to: output)
+        try encode(source, buffer: buffer, gain: gain, lossless: lossless, to: output)
         return output
     }
 
@@ -257,10 +265,17 @@ enum AudioBoost {
         return min(maxGain, max(1, targetLevel / peak))
     }
 
-    private static func encode(_ source: AVAudioFile, buffer: AVAudioPCMBuffer, gain: Float, to url: URL) throws {
+    private static func encode(_ source: AVAudioFile, buffer: AVAudioPCMBuffer, gain: Float, lossless: Bool, to url: URL) throws {
         source.framePosition = 0
         var filter = HighPass(sampleRate: source.processingFormat.sampleRate, cutoff: cutoff)
-        let settings: [String: Any] = [
+        let settings: [String: Any] = lossless ? [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM),
+            AVSampleRateKey: source.processingFormat.sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ] : [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: source.processingFormat.sampleRate,
             AVNumberOfChannelsKey: 1,
@@ -315,5 +330,43 @@ enum AudioBoost {
             y1 = y
             return y
         }
+    }
+}
+
+@MainActor
+@Observable
+final class RecordingPlayer: NSObject, AVAudioPlayerDelegate {
+    private(set) var isPlaying = false
+    @ObservationIgnored private var player: AVAudioPlayer?
+
+    func toggle(_ url: URL) {
+        if isPlaying {
+            stop()
+            return
+        }
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .default, options: [])
+        try? session.setActive(true)
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return }
+        player.delegate = self
+        guard player.play() else { return }
+        self.player = player
+        isPlaying = true
+    }
+
+    func stop() {
+        guard isPlaying else { return }
+        player?.stop()
+        finished()
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in self.finished() }
+    }
+
+    private func finished() {
+        player = nil
+        isPlaying = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

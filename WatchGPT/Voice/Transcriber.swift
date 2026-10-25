@@ -22,7 +22,7 @@ enum VoiceEngine: String, CaseIterable, Codable, Sendable {
 }
 
 enum TranscribeModel: String, CaseIterable, Codable, Sendable {
-    case best = "gpt-4o-transcribe"
+    case best = "gpt-transcribe"
     case fast = "gpt-4o-mini-transcribe"
 
     var title: String {
@@ -98,6 +98,7 @@ enum Transcriber {
         model: TranscribeModel,
         language: String,
         whisper: Bool = false,
+        context: String? = nil,
         auth: AuthService
     ) async throws -> Result {
         let isWav = fileURL.pathExtension.lowercased() == "wav"
@@ -107,7 +108,10 @@ enum Transcriber {
             mimeType: isWav ? "audio/wav" : "audio/mp4"
         )
         let chosenModel = whisper ? TranscribeModel.best : model
-        let chosenPrompt = whisper ? whisperPrompt : prompt
+        var chosenPrompt = whisper ? whisperPrompt : prompt
+        if let context, !context.isEmpty {
+            chosenPrompt += "\n\nRecent conversation, for context only (do not transcribe it):\n" + context
+        }
 
         switch engine {
         case .chatgpt:
@@ -209,7 +213,9 @@ enum Transcriber {
             form.addField(name: "model", value: model.rawValue)
             form.addField(name: "response_format", value: "json")
             form.addField(name: "prompt", value: prompt)
-            if language != "auto" { form.addField(name: "language", value: language) }
+            if language != "auto" {
+                form.addField(name: model == .best ? "languages[]" : "language", value: language)
+            }
             form.addFile(name: "file", filename: audio.filename, mimeType: audio.mimeType, data: audio.data)
 
             var request = URLRequest(url: URL(string: "https://api.openai.com/v1/audio/transcriptions")!)

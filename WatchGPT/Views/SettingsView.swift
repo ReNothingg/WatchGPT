@@ -588,6 +588,28 @@ struct VoiceSettingsView: View {
                 }
             }
 
+            if let recording = store.lastRecording {
+                Section {
+                    Button {
+                        store.playback.toggle(recording)
+                    } label: {
+                        Label(
+                            store.playback.isPlaying ? "Остановить" : "Прослушать",
+                            systemImage: store.playback.isPlaying ? "stop.fill" : "play.fill"
+                        )
+                    }
+                    if let text = store.lastTranscript {
+                        Text(text)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                } header: {
+                    Text("Последняя запись")
+                } footer: {
+                    Text(store.lastVoiceLabel ?? "Так звучит то, что ушло на распознавание.")
+                }
+            }
+
             if store.voiceEngine == .auto || store.voiceEngine == .openai {
                 Section {
                     HStack {
@@ -625,11 +647,12 @@ struct VoiceSettingsView: View {
                 } header: {
                     Text("OpenAI")
                 } footer: {
-                    Text(auth.apiKeyError ?? "Ключ берётся из вашего входа в ChatGPT. Распознавание оплачивается с API-баланса OpenAI: около $0.006 за минуту (быстрая модель — вдвое дешевле).")
+                    Text(auth.apiKeyError ?? "Ключ берётся из вашего входа в ChatGPT. Распознавание оплачивается с API-баланса OpenAI: около $0.0045 за минуту (быстрая модель — $0.003).")
                 }
             }
         }
         .navigationTitle("Голос")
+        .onDisappear { store.playback.stop() }
     }
 
     private var keyStatus: String {
@@ -639,9 +662,9 @@ struct VoiceSettingsView: View {
 
     private var footer: String {
         switch store.voiceEngine {
-        case .auto: return "Сначала диктовка ChatGPT по подписке, если она недоступна — OpenAI gpt-4o-transcribe. Понимает любые языки и формулы."
+        case .auto: return "Сначала диктовка ChatGPT по подписке, если она недоступна — OpenAI gpt-transcribe. Понимает любые языки и формулы."
         case .chatgpt: return "Диктовка ChatGPT по подписке. Неофициально: может не работать."
-        case .openai: return "OpenAI gpt-4o-transcribe: любые языки, формулы записываются символами (x², √, ∫)."
+        case .openai: return "OpenAI gpt-transcribe: любые языки, формулы записываются символами (x², √, ∫)."
         case .apple: return "Встроенная диктовка watchOS: бесплатно и офлайн, но хуже с формулами и смешанными языками."
         }
     }

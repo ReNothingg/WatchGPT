@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case settings, models, usage, voice, history, diagnostics
+    case settings, models, usage, voice, history, diagnostics, clientVersion, quickPrompts
     case gptChat(id: String, title: String)
 }
 
@@ -49,7 +49,15 @@ struct ChatView: View {
                 }
                 .accessibilityLabel("Лимиты")
             }
-            if !store.messages.isEmpty {
+            if store.messages.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: Route.quickPrompts) {
+                        Image(systemName: "text.bubble")
+                            .foregroundStyle(.white)
+                    }
+                    .accessibilityLabel("Быстрые вопросы")
+                }
+            } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         WKHaptics.click()
@@ -76,6 +84,8 @@ struct ChatView: View {
             case .voice: VoiceSettingsView()
             case .history: HistoryView()
             case .diagnostics: DiagnosticsView()
+            case .clientVersion: ClientVersionView()
+            case .quickPrompts: QuickPromptsView()
             case let .gptChat(id, title): GPTChatView(chatID: id, title: title)
             }
         }

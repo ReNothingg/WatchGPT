@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E7C1A0DE00000000000000C7 /* QuickPromptsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C1A0DE00000000000000C8 /* QuickPromptsView.swift */; };
+		E7C1A0DE00000000000000C5 /* UsageHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C1A0DE00000000000000C6 /* UsageHistory.swift */; };
+		E7C1A0DE00000000000000C3 /* QuickPrompts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C1A0DE00000000000000C4 /* QuickPrompts.swift */; };
+		E7C1A0DE00000000000000C1 /* ClientVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C1A0DE00000000000000C2 /* ClientVersion.swift */; };
 		028EA899E7225C291B7D15AF /* WatchGPTWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1ABCAB5D10C01E09738A53E /* WatchGPTWidget.swift */; };
 		B2D1F0A0000000000000A012 /* InfoWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D1F0A0000000000000A011 /* InfoWidgets.swift */; };
 		0349AE85BDED53E50925F9E2 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FFCB548C1F63055E7030258 /* PairingView.swift */; };
@@ -77,6 +81,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E7C1A0DE00000000000000C8 /* QuickPromptsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickPromptsView.swift; sourceTree = "<group>"; };
+		E7C1A0DE00000000000000C6 /* UsageHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageHistory.swift; sourceTree = "<group>"; };
+		E7C1A0DE00000000000000C4 /* QuickPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickPrompts.swift; sourceTree = "<group>"; };
+		E7C1A0DE00000000000000C2 /* ClientVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientVersion.swift; sourceTree = "<group>"; };
 		1E21E16B89543DAD45E44305 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		1FA3FA1FC4E806F6D63CAF99 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
 		23AE555938B2E477948ECCBE /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
@@ -179,6 +187,8 @@
 			isa = PBXGroup;
 			children = (
 				DDCA45F67E8745C6A38E06D3 /* ChatStore.swift */,
+				E7C1A0DE00000000000000C6 /* UsageHistory.swift */,
+				E7C1A0DE00000000000000C4 /* QuickPrompts.swift */,
 				D1A7C0DE0000000000000B04 /* GPTHistory.swift */,
 			);
 			path = Store;
@@ -188,6 +198,7 @@
 			isa = PBXGroup;
 			children = (
 				47C0EBA7939F1AD765106C25 /* ChatView.swift */,
+				E7C1A0DE00000000000000C8 /* QuickPromptsView.swift */,
 				C7A1D0E2B4F6A8C0D2E4F604 /* VoiceOrb.swift */,
 				B2D1F0A0000000000000A009 /* DiagnosticsView.swift */,
 				C7A1D0E2B4F6A8C0D2E4F602 /* HistoryView.swift */,
@@ -239,6 +250,7 @@
 			isa = PBXGroup;
 			children = (
 				682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */,
+				E7C1A0DE00000000000000C2 /* ClientVersion.swift */,
 				49C9C6E115012AD1A9E6BB68 /* ChatModels.swift */,
 				D1A7C0DE0000000000000B02 /* ChatGPTHistory.swift */,
 			);
@@ -390,6 +402,10 @@
 				D1A7C0DE0000000000000B05 /* GPTChatView.swift in Sources */,
 				D1A7C0DE0000000000000B03 /* GPTHistory.swift in Sources */,
 				D1A7C0DE0000000000000B01 /* ChatGPTHistory.swift in Sources */,
+				E7C1A0DE00000000000000C7 /* QuickPromptsView.swift in Sources */,
+				E7C1A0DE00000000000000C5 /* UsageHistory.swift in Sources */,
+				E7C1A0DE00000000000000C3 /* QuickPrompts.swift in Sources */,
+				E7C1A0DE00000000000000C1 /* ClientVersion.swift in Sources */,
 				7B04D98C502A3B920C457762 /* ChatStore.swift in Sources */,
 				E5F0A837AA0703ACC742D9D8 /* ChatView.swift in Sources */,
 				C7A1D0E2B4F6A8C0D2E4F603 /* VoiceOrb.swift in Sources */,

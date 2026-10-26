@@ -4,7 +4,7 @@ import Foundation
 struct ChatGPTClient: Sendable {
     static let baseURL = URL(string: "https://chatgpt.com/backend-api")!
     /// Codex client version reported to the backend (used to pick which models are offered).
-    static let clientVersion = "0.164.0"
+    static var clientVersion: String { ClientVersion.current }
 
     let tokens: AuthTokens
 

@@ -101,6 +101,16 @@ private struct LiveContent: View {
                 .padding(.top, -36)
                 .padding(.horizontal, -10)
 
+            if let prompt = store.voicePrompt {
+                Text("\(prompt.text)…")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Theme.accent)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.horizontal, 8)
+                    .transition(.opacity)
+            }
+
             ZStack {
                 if processing {
                     TranscribingLabel()

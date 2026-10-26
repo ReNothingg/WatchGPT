@@ -46,6 +46,13 @@ final class ChatStore {
     var fastMode: Bool { didSet { defaults.set(fastMode, forKey: Keys.fast) } }
     var handoff: Bool { didSet { defaults.set(handoff, forKey: Handoff.defaultsKey) } }
     var answerFontScale: Double { didSet { defaults.set(answerFontScale, forKey: Keys.answerFontScale) } }
+    var quickPrompts: [QuickPrompt] {
+        didSet {
+            if let data = try? JSONEncoder().encode(quickPrompts) { defaults.set(data, forKey: Keys.quickPrompts) }
+        }
+    }
+    private(set) var voicePrompt: QuickPrompt?
+    let usageHistory = UsageHistory()
 
     static let answerFontScales: [Double] = [0.8, 0.9, 1.0, 1.15, 1.3, 1.5]
 
@@ -110,6 +117,7 @@ final class ChatStore {
         static let voiceLanguage = "settings.voiceLanguage"
         static let whisperMode = "settings.whisperMode"
         static let answerFontScale = "settings.answerFontScale"
+        static let quickPrompts = "settings.quickPrompts"
         static let models = "cache.models"
         static let modelsFetchedAt = "cache.modelsFetchedAt"
         static let effortOverrides = "cache.effortOverrides"
@@ -132,6 +140,8 @@ final class ChatStore {
         voiceLanguage = d.string(forKey: Keys.voiceLanguage) ?? "auto"
         whisperMode = d.object(forKey: Keys.whisperMode) as? Bool ?? false
         answerFontScale = d.object(forKey: Keys.answerFontScale) as? Double ?? 1.0
+        quickPrompts = d.data(forKey: Keys.quickPrompts).flatMap { try? JSONDecoder().decode([QuickPrompt].self, from: $0) }
+            ?? QuickPrompt.defaults
         Transcriber.resetChatGPTAvailability()
 
         effortOverrides = (d.dictionary(forKey: Keys.effortOverrides) as? [String: [String]]) ?? [:]
@@ -146,6 +156,7 @@ final class ChatStore {
         if let data = d.data(forKey: Keys.usage) {
             usage = try? JSONDecoder().decode(UsageSnapshot.self, from: data)
         }
+        if let usage, usageHistory.isEmpty { usageHistory.record(usage) }
         loadConversation()
         let shared = SharedStore.load()
         publishedWidget = shared
@@ -231,13 +242,41 @@ final class ChatStore {
         voiceGivingUp = false
         if recorder.isActive { recorder.cancel() }
         pendingRecording = nil
+        voicePrompt = nil
         voicePhase = .idle
     }
 
     /// Text from the Apple dictation fallback on the error screen.
     func sendFromFallback(_ text: String) {
+        let message = withVoicePrompt(text)
         cancelVoice()
-        send(text)
+        send(message)
+    }
+
+    func runQuickPrompt(_ prompt: QuickPrompt) {
+        guard !isBusy, voicePhase == .idle else { return }
+        let wasNavigated = !path.isEmpty
+        path = []
+        guard prompt.asksVoice else {
+            send(prompt.text)
+            return
+        }
+        Task { @MainActor [weak self] in
+            if wasNavigated { try? await Task.sleep(for: .milliseconds(450)) }
+            guard let self, !self.isBusy, self.voicePhase == .idle else { return }
+            if self.usesCloudVoice {
+                self.startVoice()
+                if self.voicePhase == .recording { self.voicePrompt = prompt }
+            } else {
+                Dictation.present { [weak self] text in self?.send(prompt.message(with: text)) }
+            }
+        }
+    }
+
+    private func withVoicePrompt(_ text: String) -> String {
+        guard let prompt = voicePrompt else { return text }
+        voicePrompt = nil
+        return prompt.message(with: text)
     }
 
     private func failVoice(_ message: String) {
@@ -285,8 +324,9 @@ final class ChatStore {
                 self.lastTranscript = result.text
                 self.pendingRecording = nil
                 self.voiceFailures = 0
+                let message = self.withVoicePrompt(result.text)
                 self.voicePhase = .idle
-                self.send(result.text)
+                self.send(message)
             } catch {
                 guard !Task.isCancelled else { return }
                 DiagnosticsLog.shared.record(.voice, error)
@@ -515,6 +555,7 @@ final class ChatStore {
     private func generate(replyID: UUID) async {
         var didRetryAuth = false
         var didFixEffort = false
+        var didUpgradeClient = false
         let chatID = conversationID
         defer {
             status = .idle
@@ -603,6 +644,10 @@ final class ChatStore {
                 if (isInBackground || interruptedInBackground) && !didAutoResume && Self.isTransient(error) {
                     resumeOnActive = true
                     return
+                }
+                if !didUpgradeClient, text(of: replyID).isEmpty, await ClientVersion.refreshAfterError(error) {
+                    didUpgradeClient = true
+                    continue
                 }
                 fail(replyID, error)
                 if case let ChatGPTClient.APIError.usageLimit(resetAt) = error {
@@ -734,6 +779,7 @@ final class ChatStore {
         await withTaskGroup(of: Void.self) { group in
             if usageStale { group.addTask { await self.refreshUsage() } }
             if modelsStale { group.addTask { await self.refreshModels() } }
+            group.addTask { await self.refreshClientVersion() }
         }
     }
 
@@ -764,14 +810,28 @@ final class ChatStore {
         }
     }
 
-    private func refreshModels() async {
+    func refreshClientVersion() async {
+        guard auth.isSignedIn else { return }
+        if case .updated = await ClientVersion.refresh() { await refreshModels() }
+    }
+
+    func refreshModels() async {
         guard let tokens = try? await auth.validTokens() else { return }
-        let fetched: [ModelOption]
-        do {
-            fetched = try await ChatGPTClient(tokens: tokens).fetchModels()
-        } catch {
-            if !GPTHistory.isCancellation(error) { DiagnosticsLog.shared.record(.models, error) }
-            return
+        var fetched: [ModelOption] = []
+        var didUpgradeClient = false
+        while true {
+            do {
+                fetched = try await ChatGPTClient(tokens: tokens).fetchModels()
+                break
+            } catch {
+                if GPTHistory.isCancellation(error) { return }
+                if !didUpgradeClient, await ClientVersion.refreshAfterError(error) {
+                    didUpgradeClient = true
+                    continue
+                }
+                DiagnosticsLog.shared.record(.models, error)
+                return
+            }
         }
         guard !fetched.isEmpty else { return }
         defaults.set(Date.now, forKey: Keys.modelsFetchedAt)
@@ -840,6 +900,7 @@ final class ChatStore {
         guard merged != usage else { return }
         let contentChanged = merged.ignoringTimestamp != usage?.ignoringTimestamp
         usage = merged
+        if contentChanged { usageHistory.record(merged) }
         if let data = try? JSONEncoder().encode(merged) { defaults.set(data, forKey: Keys.usage) }
         guard contentChanged else { return }
         LimitReminder.update(for: merged)
@@ -851,6 +912,7 @@ final class ChatStore {
         gptHistory.clear()
         path = []
         usage = nil
+        usageHistory.clear()
         defaults.removeObject(forKey: Keys.usage)
         defaults.removeObject(forKey: Keys.modelsFetchedAt)
         LimitReminder.update(for: nil)

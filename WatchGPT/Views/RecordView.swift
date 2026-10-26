@@ -247,19 +247,27 @@ private struct FailedContent: View {
                     .font(.footnote)
                     .multilineTextAlignment(.center)
 
-                Button {
-                    store.retryTranscription()
-                } label: {
-                    Label("Повторить", systemImage: "arrow.clockwise")
-                }
-                .tint(Theme.accent)
-                .doubleTapAction()
+                if store.voiceGivingUp {
+                    Text("Закрываю…")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.secondaryText)
+                } else {
+                    Button {
+                        store.retryTranscription()
+                    } label: {
+                        Label("Повторить", systemImage: "arrow.clockwise")
+                    }
+                    .tint(Theme.accent)
+                    .doubleTapAction()
 
-                TextFieldLink(prompt: Text("Спросите что угодно")) {
-                    Label("Диктовка Apple", systemImage: "mic")
-                        .frame(maxWidth: .infinity)
-                } onSubmit: { text in
-                    store.sendFromFallback(text)
+                    TextFieldLink(prompt: Text("Спросите что угодно")) {
+                        Label("Диктовка Apple", systemImage: "mic")
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                    } onSubmit: { text in
+                        store.sendFromFallback(text)
+                    }
+                    .tint(.white)
                 }
             }
             .padding(.top, 4)

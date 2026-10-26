@@ -25,9 +25,10 @@ struct DiagnosticsView: View {
                 ShareLink(item: report()) {
                     Label("Отправить отчёт", systemImage: "square.and.arrow.up")
                         .font(.footnote)
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                 }
-                .tint(Theme.control)
+                .tint(.white)
                 if !log.entries.isEmpty {
                     Button(role: .destructive) {
                         confirmClear = true

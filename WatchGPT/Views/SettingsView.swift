@@ -645,6 +645,7 @@ struct VoiceSettingsView: View {
             if store.voiceEngine != .apple {
                 Section {
                     Toggle("Режим шёпота", isOn: $store.whisperMode)
+                        .tint(Theme.accent)
                 } footer: {
                     Text("Для тихой речи: запись без потерь, усиление громкости и точная модель OpenAI, если есть API-ключ. Говорите, поднеся часы ко рту.")
                 }

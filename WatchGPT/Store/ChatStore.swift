@@ -70,6 +70,10 @@ final class ChatStore {
     var whisperMode: Bool { didSet { defaults.set(whisperMode, forKey: Keys.whisperMode) } }
     @ObservationIgnored private var voiceTask: Task<Void, Never>?
     @ObservationIgnored private var pendingRecording: URL?
+    private(set) var voiceGivingUp = false
+    @ObservationIgnored private var voiceFailures = 0
+    @ObservationIgnored private var voiceCloseTask: Task<Void, Never>?
+    private static let maxVoiceFailures = 3
 
     /// Drives the full-screen recorder.
     var isVoiceSheetPresented: Bool {
@@ -164,7 +168,7 @@ final class ChatStore {
     var usesCloudVoice: Bool { voiceEngine != .apple }
 
     func startVoice() {
-        guard !isBusy, voicePhase == .idle || isFailedVoice else { return }
+        guard !isBusy, !voiceGivingUp, voicePhase == .idle || isFailedVoice else { return }
         speaker.stop()
         playback.stop()
         pendingRecording = nil
@@ -181,8 +185,7 @@ final class ChatStore {
             } catch {
                 guard !Task.isCancelled else { return }
                 DiagnosticsLog.shared.record(.voice, error)
-                self.voicePhase = .failed(Self.describe(error))
-                WKInterfaceDevice.current().play(.failure)
+                self.failVoice(Self.describe(error))
             }
         }
     }
@@ -194,8 +197,7 @@ final class ChatStore {
                 try recorder.resume()
                 WKInterfaceDevice.current().play(.start)
             } catch {
-                voicePhase = .failed(Self.describe(error))
-                WKInterfaceDevice.current().play(.failure)
+                failVoice(Self.describe(error))
             }
         } else if recorder.isRecording {
             recorder.pause()
@@ -207,7 +209,7 @@ final class ChatStore {
     func finishVoice() {
         guard voicePhase == .recording else { return }
         guard let url = recorder.stop() else {
-            voicePhase = .failed("Слишком короткая запись. Нажмите и говорите.")
+            failVoice("Слишком короткая запись. Нажмите и говорите.")
             return
         }
         WKInterfaceDevice.current().play(.click)
@@ -223,6 +225,10 @@ final class ChatStore {
     func cancelVoice() {
         voiceTask?.cancel()
         voiceTask = nil
+        voiceCloseTask?.cancel()
+        voiceCloseTask = nil
+        voiceFailures = 0
+        voiceGivingUp = false
         if recorder.isActive { recorder.cancel() }
         pendingRecording = nil
         voicePhase = .idle
@@ -232,6 +238,19 @@ final class ChatStore {
     func sendFromFallback(_ text: String) {
         cancelVoice()
         send(text)
+    }
+
+    private func failVoice(_ message: String) {
+        voiceFailures += 1
+        voicePhase = .failed(message)
+        WKInterfaceDevice.current().play(.failure)
+        guard voiceFailures >= Self.maxVoiceFailures else { return }
+        voiceGivingUp = true
+        voiceCloseTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self, self.voiceGivingUp else { return }
+            self.cancelVoice()
+        }
     }
 
     private var isFailedVoice: Bool {
@@ -265,13 +284,13 @@ final class ChatStore {
                 self.lastVoiceLabel = result.label
                 self.lastTranscript = result.text
                 self.pendingRecording = nil
+                self.voiceFailures = 0
                 self.voicePhase = .idle
                 self.send(result.text)
             } catch {
                 guard !Task.isCancelled else { return }
                 DiagnosticsLog.shared.record(.voice, error)
-                self.voicePhase = .failed(Self.describe(error))
-                WKInterfaceDevice.current().play(.failure)
+                self.failVoice(Self.describe(error))
             }
         }
     }

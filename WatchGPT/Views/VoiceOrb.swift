@@ -66,7 +66,7 @@ private struct RGB {
 
     static let green = RGB(r: 0.063, g: 0.80, b: 0.55)
     static let mint = RGB(r: 0.16, g: 0.80, b: 0.62)
-    static let accent = RGB(r: 0.063, g: 0.639, b: 0.498)
+    static let accent = RGB(r: 0.188, g: 0.835, b: 0.784)
     static let teal = RGB(r: 0.10, g: 0.78, b: 0.86)
     static let blue = RGB(r: 0.25, g: 0.48, b: 1.0)
     static let violet = RGB(r: 0.55, g: 0.36, b: 1.0)

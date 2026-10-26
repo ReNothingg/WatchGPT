@@ -2,7 +2,7 @@ import SwiftUI
 
 enum Theme {
     /// ChatGPT green.
-    static let accent = Color(red: 0.063, green: 0.639, blue: 0.498)
+    static let accent = Color(red: 0.188, green: 0.835, blue: 0.784)
     static let bubble = Color(red: 0.149, green: 0.149, blue: 0.157)
     static let chip = Color.white.opacity(0.10)
     static let control = Color(white: 0.2)

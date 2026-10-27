@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case settings, models, usage, voice, history, diagnostics, clientVersion, quickPrompts
+    case settings, models, usage, voice, history, diagnostics, clientVersion, quickPrompts, claude
     case gptChat(id: String, title: String)
 }
 
@@ -86,6 +86,7 @@ struct ChatView: View {
             case .diagnostics: DiagnosticsView()
             case .clientVersion: ClientVersionView()
             case .quickPrompts: QuickPromptsView()
+            case .claude: ClaudeSettingsView()
             case let .gptChat(id, title): GPTChatView(chatID: id, title: title)
             }
         }
@@ -96,7 +97,7 @@ struct ChatView: View {
             isActive: store.handoff && store.path.isEmpty && store.lastAnswer != nil,
             title: "Чат WatchGPT"
         ) {
-            Handoff.url(conversationID: store.conversationID, messages: store.messages)
+            Handoff.url(conversationID: store.conversationID, messages: store.messages, claude: store.provider == .claude)
         }
         .onChange(of: store.pendingAsk) { _, pending in
             if pending { openDictationFromWidget() }

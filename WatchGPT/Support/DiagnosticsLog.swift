@@ -67,6 +67,19 @@ final class DiagnosticsLog {
             case let .http(code, _): return "HTTP \(code)"
             case .stream: return "stream error"
             }
+        case let api as AnthropicClient.APIError:
+            switch api {
+            case .noKey: return "Claude: no key"
+            case .unauthorized: return "Claude: HTTP 401"
+            case .forbidden: return "Claude: HTTP 403"
+            case .modelNotFound: return "Claude: HTTP 404"
+            case .rateLimited: return "Claude: HTTP 429"
+            case .overloaded: return "Claude: overloaded"
+            case .lowBalance: return "Claude: credit balance"
+            case .refusal: return "Claude: refusal"
+            case let .http(code, _): return "Claude: HTTP \(code)"
+            case .stream: return "Claude: stream error"
+            }
         case let url as URLError:
             return "URLError \(url.code.rawValue)"
         default:

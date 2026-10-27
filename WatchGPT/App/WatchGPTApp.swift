@@ -66,6 +66,9 @@ struct RootView: View {
             }
             store.publishWidget()
         }
+        .onChange(of: auth.claudeKey) { _, _ in
+            store.claudeKeyChanged()
+        }
         .task {
             if AskRequest.consume() { store.pendingAsk = true }
             store.publishWidget()

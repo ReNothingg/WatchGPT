@@ -59,6 +59,19 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     CardDivider()
+                    NavigationLink(value: Route.claude) {
+                        SettingsRow(title: "Claude") {
+                            if auth.hasClaudeKey {
+                                Text(store.provider == .claude ? "включён" : "ключ есть")
+                                    .foregroundStyle(store.provider == .claude ? Theme.claude : Theme.secondaryText)
+                            } else {
+                                Text("нет ключа")
+                                    .foregroundStyle(Theme.secondaryText)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    CardDivider()
                     NavigationLink(value: Route.usage) {
                         SettingsRow(title: "Лимиты") {
                             if let left = store.usage?.tightest()?.remainingPercent() {
@@ -282,23 +295,74 @@ private struct Chevron: View {
 
 struct ModelPickerView: View {
     @Environment(ChatStore.self) private var store
+    @Environment(AuthService.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
             VStack(spacing: 4) {
-                ForEach(store.models) { option in
-                    ModelRow(option: option, isSelected: option.slug == store.selectedModelSlug) {
-                        store.selectedModelSlug = option.slug
-                        WKHaptics.click()
-                        dismiss()
+                ForEach(Provider.allCases, id: \.self) { provider in
+                    ProviderHeader(provider: provider)
+                    if provider == .claude && !auth.hasClaudeKey {
+                        NavigationLink(value: Route.claude) {
+                            HStack(spacing: 6) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Добавить API-ключ")
+                                        .font(.footnote)
+                                    Text("Модели Claude по API Anthropic")
+                                        .font(.caption2)
+                                        .foregroundStyle(Theme.secondaryText)
+                                }
+                                Spacer(minLength: 2)
+                                Chevron()
+                            }
+                            .padding(.leading, 12)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 9)
+                            .frame(minHeight: 44)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surfaceDim))
+                            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        ForEach(provider == .claude ? store.claudeModels : store.models) { option in
+                            ModelRow(option: option, isSelected: store.isSelected(option, provider: provider)) {
+                                store.select(option, provider: provider)
+                                WKHaptics.click()
+                                dismiss()
+                            }
+                        }
                     }
                 }
             }
             .padding(.horizontal, 2)
         }
         .navigationTitle("Модель")
-        .task { await store.refreshModels(ifOlderThan: 600) }
+        .task {
+            async let gpt: Void = store.refreshModels(ifOlderThan: 600)
+            async let claude: Void = store.refreshClaudeModels(ifOlderThan: 600)
+            _ = await (gpt, claude)
+        }
+    }
+}
+
+private struct ProviderHeader: View {
+    let provider: Provider
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: provider == .claude ? "asterisk" : "sparkles")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(provider == .claude ? Theme.claude : Theme.accent)
+            Text(provider.title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Theme.secondaryText)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, provider == .chatgpt ? 2 : 10)
+        .padding(.bottom, 2)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -695,7 +759,7 @@ struct VoiceSettingsView: View {
                         Text("\(key.prefix(8))…\(key.suffix(4)) · \(key.count) симв.")
                             .font(.caption2)
                             .foregroundStyle(Theme.secondaryText)
-                        keyCheckRow
+                        KeyCheckRow(check: auth.keyCheck) { await auth.verifyAPIKey() }
                     }
 
                     Button {
@@ -736,12 +800,31 @@ struct VoiceSettingsView: View {
         .onDisappear { store.playback.stop() }
     }
 
-    @ViewBuilder
-    private var keyCheckRow: some View {
-        switch auth.keyCheck {
+    private var keyStatus: String {
+        guard let key = auth.apiKey else { return "нет" }
+        if key.fromBuild == true { return "из сборки" }
+        return key.isManual ? "свой" : "из аккаунта"
+    }
+
+    private var footer: String {
+        switch store.voiceEngine {
+        case .auto: return "Сначала диктовка ChatGPT по подписке, если она недоступна — OpenAI gpt-transcribe. Понимает любые языки и формулы."
+        case .chatgpt: return "Диктовка ChatGPT по подписке. Неофициально: может не работать."
+        case .openai: return "OpenAI gpt-transcribe: любые языки, формулы записываются символами (x², √, ∫)."
+        case .apple: return "Встроенная диктовка watchOS: бесплатно и офлайн, но хуже с формулами и смешанными языками."
+        }
+    }
+}
+
+private struct KeyCheckRow: View {
+    let check: AuthService.KeyCheck
+    let verify: () async -> Void
+
+    var body: some View {
+        switch check {
         case .unknown:
             Button {
-                Task { await auth.verifyAPIKey() }
+                Task { await verify() }
             } label: {
                 Label("Проверить ключ", systemImage: "checkmark.shield")
             }
@@ -756,7 +839,7 @@ struct VoiceSettingsView: View {
                 .foregroundStyle(Theme.accent)
         case let .invalid(message):
             Button {
-                Task { await auth.verifyAPIKey() }
+                Task { await verify() }
             } label: {
                 Text(message)
                     .font(.footnote)
@@ -764,20 +847,101 @@ struct VoiceSettingsView: View {
             }
         }
     }
+}
 
-    private var keyStatus: String {
-        guard let key = auth.apiKey else { return "нет" }
-        if key.fromBuild == true { return "из сборки" }
-        return key.isManual ? "свой" : "из аккаунта"
+struct ClaudeSettingsView: View {
+    @Environment(ChatStore.self) private var store
+    @Environment(AuthService.self) private var auth
+    @State private var keyDraft = ""
+    @State private var confirmDelete = false
+
+    var body: some View {
+        List {
+            Section {
+                Toggle("Отвечает Claude", isOn: claudeMode)
+                    .tint(Theme.claude)
+                    .disabled(!auth.hasClaudeKey)
+                if store.provider == .claude {
+                    NavigationLink(value: Route.models) {
+                        HStack {
+                            Text("Модель")
+                            Spacer()
+                            Text(store.claudeModel.displayName)
+                                .foregroundStyle(Theme.secondaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .font(.footnote)
+                    }
+                }
+            } footer: {
+                Text(auth.hasClaudeKey
+                     ? "Вопросы уходят в Claude вместо ChatGPT. Голос, история и лимиты ChatGPT остаются как были."
+                     : "Сначала добавьте API-ключ Anthropic.")
+            }
+
+            Section {
+                HStack {
+                    Text("API-ключ")
+                    Spacer()
+                    Text(keyStatus)
+                        .foregroundStyle(auth.hasClaudeKey ? Theme.claude : .orange)
+                }
+                .font(.footnote)
+
+                if let key = auth.claudeKey?.key {
+                    Text("\(key.prefix(10))…\(key.suffix(4)) · \(key.count) симв.")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.secondaryText)
+                    KeyCheckRow(check: auth.claudeKeyCheck) { await auth.verifyClaudeKey() }
+                }
+
+                TextField("Вставить ключ sk-ant-…", text: $keyDraft)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onChange(of: keyDraft) { _, value in
+                        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                        auth.setManualClaudeKey(value)
+                        keyDraft = ""
+                    }
+
+                if auth.hasClaudeKey {
+                    Button(role: .destructive) {
+                        confirmDelete = true
+                    } label: {
+                        Label("Удалить ключ", systemImage: "trash")
+                    }
+                }
+            } header: {
+                Text("Anthropic")
+            } footer: {
+                Text("Ключ создаётся на console.anthropic.com → API Keys. Удобнее всего вписать его в Config/Local.xcconfig до сборки. Ответы оплачиваются с API-баланса Anthropic, а не подпиской Claude Pro или Max. Дешевле всего Haiku, дороже Opus и Fable; поиск в интернете — около $10 за 1000 запросов.")
+            }
+        }
+        .navigationTitle("Claude")
+        .confirmationDialog("Удалить ключ Anthropic?", isPresented: $confirmDelete) {
+            Button("Удалить", role: .destructive) { auth.clearClaudeKey() }
+            Button("Отмена", role: .cancel) {}
+        }
+        .task {
+            if auth.hasClaudeKey, auth.claudeKeyCheck == .unknown { await auth.verifyClaudeKey() }
+        }
     }
 
-    private var footer: String {
-        switch store.voiceEngine {
-        case .auto: return "Сначала диктовка ChatGPT по подписке, если она недоступна — OpenAI gpt-transcribe. Понимает любые языки и формулы."
-        case .chatgpt: return "Диктовка ChatGPT по подписке. Неофициально: может не работать."
-        case .openai: return "OpenAI gpt-transcribe: любые языки, формулы записываются символами (x², √, ∫)."
-        case .apple: return "Встроенная диктовка watchOS: бесплатно и офлайн, но хуже с формулами и смешанными языками."
-        }
+    private var claudeMode: Binding<Bool> {
+        Binding(
+            get: { store.provider == .claude },
+            set: { on in
+                store.provider = on ? .claude : .chatgpt
+                store.publishWidget()
+                WKHaptics.click()
+            }
+        )
+    }
+
+    private var keyStatus: String {
+        guard let key = auth.claudeKey else { return "нет" }
+        return key.fromBuild == true ? "из сборки" : "свой"
     }
 }
 

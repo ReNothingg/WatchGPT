@@ -33,13 +33,31 @@ final class ChatStore {
     var selectedModelSlug: String {
         didSet {
             defaults.set(selectedModelSlug, forKey: Keys.model)
-            if !selectedModel.efforts.isEmpty, !selectedModel.efforts.contains(effort) {
-                effort = selectedModel.defaultEffort ?? selectedModel.efforts.first ?? "low"
+            if !gptModel.efforts.isEmpty, !gptModel.efforts.contains(gptEffort) {
+                gptEffort = gptModel.defaultEffort ?? gptModel.efforts.first ?? "low"
             }
             publishWidget()
         }
     }
-    var effort: String { didSet { defaults.set(effort, forKey: Keys.effort) } }
+    var gptEffort: String { didSet { defaults.set(gptEffort, forKey: Keys.effort) } }
+    var provider: Provider { didSet { defaults.set(provider.rawValue, forKey: Keys.provider) } }
+    private(set) var claudeModels: [ModelOption] = ModelOption.claudeFallback
+    var claudeModelSlug: String {
+        didSet {
+            defaults.set(claudeModelSlug, forKey: Keys.claudeModel)
+            if !claudeModel.efforts.isEmpty, !claudeModel.efforts.contains(claudeEffort) {
+                claudeEffort = claudeModel.defaultEffort ?? claudeModel.efforts.first ?? "low"
+            }
+        }
+    }
+    var claudeEffort: String { didSet { defaults.set(claudeEffort, forKey: Keys.claudeEffort) } }
+
+    var effort: String {
+        get { provider == .claude ? claudeEffort : gptEffort }
+        set {
+            if provider == .claude { claudeEffort = newValue } else { gptEffort = newValue }
+        }
+    }
     var webSearch: Bool { didSet { defaults.set(webSearch, forKey: Keys.webSearch) } }
     var autoSpeak: Bool { didSet { defaults.set(autoSpeak, forKey: Keys.autoSpeak) } }
     var conciseAnswers: Bool { didSet { defaults.set(conciseAnswers, forKey: Keys.concise) } }
@@ -122,6 +140,11 @@ final class ChatStore {
         static let modelsFetchedAt = "cache.modelsFetchedAt"
         static let effortOverrides = "cache.effortOverrides"
         static let usage = "cache.usage"
+        static let provider = "settings.provider"
+        static let claudeModel = "settings.claudeModel"
+        static let claudeEffort = "settings.claudeEffort"
+        static let claudeModels = "cache.claudeModels"
+        static let claudeModelsFetchedAt = "cache.claudeModelsFetchedAt"
     }
 
     init(auth: AuthService) {
@@ -129,7 +152,11 @@ final class ChatStore {
         gptHistory = GPTHistory(auth: auth)
         let d = UserDefaults.standard
         selectedModelSlug = d.string(forKey: Keys.model) ?? ModelOption.fallback[0].slug
-        effort = d.string(forKey: Keys.effort) ?? "low"
+        gptEffort = d.string(forKey: Keys.effort) ?? "low"
+        let savedProvider = d.string(forKey: Keys.provider).flatMap(Provider.init(rawValue:)) ?? .chatgpt
+        provider = savedProvider == .claude && !auth.hasClaudeKey ? .chatgpt : savedProvider
+        claudeModelSlug = d.string(forKey: Keys.claudeModel) ?? ModelOption.claudeFallback[0].slug
+        claudeEffort = d.string(forKey: Keys.claudeEffort) ?? "low"
         webSearch = d.object(forKey: Keys.webSearch) as? Bool ?? true
         autoSpeak = d.object(forKey: Keys.autoSpeak) as? Bool ?? false
         conciseAnswers = d.object(forKey: Keys.concise) as? Bool ?? true
@@ -150,8 +177,15 @@ final class ChatStore {
             models = cached
         }
         models = applyEffortOverrides(models)
-        if !selectedModel.efforts.isEmpty, !selectedModel.efforts.contains(effort) {
-            effort = selectedModel.defaultEffort ?? selectedModel.efforts.first ?? "low"
+        if !gptModel.efforts.isEmpty, !gptModel.efforts.contains(gptEffort) {
+            gptEffort = gptModel.defaultEffort ?? gptModel.efforts.first ?? "low"
+        }
+        if let data = d.data(forKey: Keys.claudeModels),
+           let cached = try? JSONDecoder().decode([ModelOption].self, from: data), !cached.isEmpty {
+            claudeModels = cached
+        }
+        if !claudeModel.efforts.isEmpty, !claudeModel.efforts.contains(claudeEffort) {
+            claudeEffort = claudeModel.defaultEffort ?? claudeModel.efforts.first ?? "low"
         }
         if let data = d.data(forKey: Keys.usage) {
             usage = try? JSONDecoder().decode(UsageSnapshot.self, from: data)
@@ -163,8 +197,28 @@ final class ChatStore {
         widgetAnswer = shared.lastAnswer
     }
 
-    var selectedModel: ModelOption {
+    var gptModel: ModelOption {
         models.first { $0.slug == selectedModelSlug } ?? models.first ?? ModelOption.fallback[0]
+    }
+
+    var claudeModel: ModelOption {
+        claudeModels.first { $0.slug == claudeModelSlug } ?? claudeModels.first ?? ModelOption.claudeFallback[0]
+    }
+
+    var selectedModel: ModelOption { provider == .claude ? claudeModel : gptModel }
+
+    func select(_ model: ModelOption, provider: Provider) {
+        if provider == .claude {
+            claudeModelSlug = model.slug
+        } else {
+            selectedModelSlug = model.slug
+        }
+        self.provider = provider
+        publishWidget()
+    }
+
+    func isSelected(_ model: ModelOption, provider: Provider) -> Bool {
+        self.provider == provider && model.slug == (provider == .claude ? claudeModelSlug : selectedModelSlug)
     }
 
     var isBusy: Bool { status != .idle }
@@ -402,7 +456,7 @@ final class ChatStore {
         lastStreamActivity = .now
 
         let question = ChatMessage(role: .user, text: text, refine: refine)
-        let reply = ChatMessage(role: .assistant, text: "")
+        let reply = ChatMessage(role: .assistant, text: "", claude: provider == .claude ? true : nil)
         messages.append(question)
         messages.append(reply)
         scrollTarget = question.id
@@ -495,6 +549,10 @@ final class ChatStore {
         conversationID = chat.id
         messages = chat.messages
         scrollTarget = messages.last(where: { $0.role == .user })?.id
+        if let answer = chat.messages.last(where: { $0.role == .assistant && !$0.isError }) {
+            let answeredBy: Provider = answer.claude == true ? .claude : .chatgpt
+            if answeredBy == .chatgpt || auth.hasClaudeKey { provider = answeredBy }
+        }
         publishWidget()
     }
 
@@ -515,6 +573,7 @@ final class ChatStore {
         messages = Array(merged.suffix(Self.importLimit))
         scrollTarget = messages.last(where: { $0.role == .user })?.id
         saveConversation(title: conversation.title)
+        provider = .chatgpt
         publishWidget()
         path = []
         if ask { pendingAsk = true }
@@ -557,6 +616,7 @@ final class ChatStore {
         var didFixEffort = false
         var didUpgradeClient = false
         let chatID = conversationID
+        let useClaude = provider == .claude
         defer {
             status = .idle
             sendTask = nil
@@ -573,10 +633,15 @@ final class ChatStore {
 
         while true {
             do {
-                let tokens = try await auth.validTokens()
-                let client = ChatGPTClient(tokens: tokens)
                 let history = messages.filter { $0.id != replyID }
-                let stream = client.stream(messages: history, options: requestOptions())
+                let stream: AsyncThrowingStream<ChatGPTClient.StreamEvent, Error>
+                if useClaude {
+                    guard let key = auth.claudeKey?.key else { throw AnthropicClient.APIError.noKey }
+                    stream = AnthropicClient(apiKey: key).stream(messages: history, options: claudeOptions())
+                } else {
+                    let tokens = try await auth.validTokens()
+                    stream = ChatGPTClient(tokens: tokens).stream(messages: history, options: requestOptions())
+                }
 
                 var pending = ""
                 var lastFlush = ContinuousClock.now - .seconds(1)
@@ -629,7 +694,7 @@ final class ChatStore {
                     if autoSpeak && !siriRequest { speaker.speak(text(of: replyID)) }
                 }
                 return
-            } catch where !didFixEffort && text(of: replyID).isEmpty && fixUnsupportedEffort(error) {
+            } catch where !useClaude && !didFixEffort && text(of: replyID).isEmpty && fixUnsupportedEffort(error) {
                 didFixEffort = true
                 continue
             } catch ChatGPTClient.APIError.unauthorized where !didRetryAuth {
@@ -645,7 +710,7 @@ final class ChatStore {
                     resumeOnActive = true
                     return
                 }
-                if !didUpgradeClient, text(of: replyID).isEmpty, await ClientVersion.refreshAfterError(error) {
+                if !useClaude, !didUpgradeClient, text(of: replyID).isEmpty, await ClientVersion.refreshAfterError(error) {
                     didUpgradeClient = true
                     continue
                 }
@@ -685,34 +750,56 @@ final class ChatStore {
     }
 
     private func requestOptions() -> ChatGPTClient.Options {
-        let model = selectedModel
-        var effortValue: String? = model.efforts.isEmpty ? nil : (model.efforts.contains(effort) ? effort : model.defaultEffort)
+        let model = gptModel
         let refine = messages.last { $0.role == .user }?.refine
         var verbosity = refine?.verbosity ?? (conciseAnswers ? "low" : "medium")
-        var context = "Current date and time: \(Date.now.formatted(date: .complete, time: .shortened))."
-        if siriRequest {
-            effortValue = model.efforts.min { ModelOption.effortRank($0) < ModelOption.effortRank($1) } ?? effortValue
-            verbosity = "low"
-            context += " Siri will read this answer aloud: reply in one to three short spoken sentences, without lists, formulas or markdown."
-        }
+        if siriRequest { verbosity = "low" }
         return ChatGPTClient.Options(
             model: model.slug,
-            effort: effortValue,
+            effort: requestEffort(model, selected: gptEffort),
             webSearch: webSearch,
             verbosity: model.supportsVerbosity ? verbosity : nil,
             fast: fastMode && model.supportsFast == true,
-            instructions: instructions(),
-            context: context,
+            instructions: instructions(assistant: "ChatGPT"),
+            context: requestContext(),
             conversationID: conversationID
         )
     }
 
-    private func instructions() -> String {
+    private func claudeOptions() -> AnthropicClient.Options {
+        let model = claudeModel
+        return AnthropicClient.Options(
+            model: model.slug,
+            effort: requestEffort(model, selected: claudeEffort),
+            thinking: model.thinking == true,
+            webSearch: webSearch,
+            instructions: instructions(assistant: "Claude"),
+            context: requestContext()
+        )
+    }
+
+    private func requestEffort(_ model: ModelOption, selected: String) -> String? {
+        guard !model.efforts.isEmpty else { return nil }
+        if siriRequest {
+            return model.efforts.min { ModelOption.effortRank($0) < ModelOption.effortRank($1) }
+        }
+        return model.efforts.contains(selected) ? selected : model.defaultEffort
+    }
+
+    private func requestContext() -> String {
+        var context = "Current date and time: \(Date.now.formatted(date: .complete, time: .shortened))."
+        if siriRequest {
+            context += " Siri will read this answer aloud: reply in one to three short spoken sentences, without lists, formulas or markdown."
+        }
+        return context
+    }
+
+    private func instructions(assistant: String) -> String {
         let style = conciseAnswers
             ? "Be brief: lead with the answer, then at most 2–4 short sentences or a compact list. Expand only if the user explicitly asks for detail."
             : "Be clear and well structured, but keep in mind the screen is small; avoid filler."
         return """
-        You are ChatGPT running on the user's Apple Watch. The user speaks to you through dictation, \
+        You are \(assistant) running on the user's Apple Watch. The user speaks to you through dictation, \
         so their message may contain speech-recognition mistakes — infer what they meant. \
         Always reply in the language of the user's message. \(style) \
         Write plain text that is easy to read on a tiny screen and to read aloud: no tables, no headings, \
@@ -776,9 +863,11 @@ final class ChatStore {
         lastMetaRefresh = now
         let usageStale = force || usage.map { now.timeIntervalSince($0.updatedAt) >= Self.usageMaxAge } ?? true
         let modelsStale = modelsAreStale(maxAge: Self.modelsMaxAge)
+        let claudeStale = auth.hasClaudeKey && claudeModelsAreStale(maxAge: Self.modelsMaxAge)
         await withTaskGroup(of: Void.self) { group in
             if usageStale { group.addTask { await self.refreshUsage() } }
             if modelsStale { group.addTask { await self.refreshModels() } }
+            if claudeStale { group.addTask { await self.refreshClaudeModels() } }
             group.addTask { await self.refreshClientVersion() }
         }
     }
@@ -786,6 +875,44 @@ final class ChatStore {
     func refreshModels(ifOlderThan maxAge: TimeInterval) async {
         guard auth.isSignedIn, modelsAreStale(maxAge: maxAge) else { return }
         await refreshModels()
+    }
+
+    func refreshClaudeModels(ifOlderThan maxAge: TimeInterval) async {
+        guard auth.hasClaudeKey, claudeModelsAreStale(maxAge: maxAge) else { return }
+        await refreshClaudeModels()
+    }
+
+    func refreshClaudeModels() async {
+        guard let key = auth.claudeKey?.key else { return }
+        do {
+            let fetched = try await AnthropicClient(apiKey: key).fetchModels()
+            guard auth.claudeKey?.key == key, !fetched.isEmpty else { return }
+            defaults.set(Date.now, forKey: Keys.claudeModelsFetchedAt)
+            if fetched != claudeModels { claudeModels = fetched }
+            if let data = try? JSONEncoder().encode(fetched) { defaults.set(data, forKey: Keys.claudeModels) }
+            if !fetched.contains(where: { $0.slug == claudeModelSlug }) {
+                claudeModelSlug = fetched.first { $0.slug == ModelOption.claudeFallback[0].slug }?.slug ?? fetched[0].slug
+            }
+        } catch {
+            if GPTHistory.isCancellation(error) { return }
+            DiagnosticsLog.shared.record(.models, error)
+        }
+    }
+
+    func claudeKeyChanged() {
+        defaults.removeObject(forKey: Keys.claudeModelsFetchedAt)
+        if auth.hasClaudeKey {
+            Task { await refreshClaudeModels() }
+        } else {
+            provider = .chatgpt
+            claudeModels = ModelOption.claudeFallback
+            defaults.removeObject(forKey: Keys.claudeModels)
+        }
+    }
+
+    private func claudeModelsAreStale(maxAge: TimeInterval) -> Bool {
+        guard let fetchedAt = defaults.object(forKey: Keys.claudeModelsFetchedAt) as? Date else { return true }
+        return Date.now.timeIntervalSince(fetchedAt) >= maxAge
     }
 
     private func modelsAreStale(maxAge: TimeInterval) -> Bool {
@@ -863,16 +990,16 @@ final class ChatStore {
         case let ChatGPTClient.APIError.http(_, m): message = m
         default: return false
         }
-        guard let parsed = Self.parseUnsupportedValue(message), parsed.invalid == effort else { return false }
-        let model = selectedModel
+        guard let parsed = Self.parseUnsupportedValue(message), parsed.invalid == gptEffort else { return false }
+        let model = gptModel
         let supported = parsed.supported
         effortOverrides[model.slug] = supported
         defaults.set(effortOverrides, forKey: Keys.effortOverrides)
         models = applyEffortOverrides(models)
 
         let rank = ModelOption.effortRank(parsed.invalid)
-        let efforts = selectedModel.efforts
-        effort = efforts.last { ModelOption.effortRank($0) < rank } ?? selectedModel.defaultEffort ?? efforts.first ?? "low"
+        let efforts = gptModel.efforts
+        gptEffort = efforts.last { ModelOption.effortRank($0) < rank } ?? gptModel.defaultEffort ?? efforts.first ?? "low"
         return true
     }
 

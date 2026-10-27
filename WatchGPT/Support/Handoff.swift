@@ -6,6 +6,7 @@ enum Handoff {
     static let defaultsKey = "settings.handoff"
 
     private static let base = URL(string: "https://chatgpt.com/")!
+    private static let claudeBase = URL(string: "https://claude.ai/new")!
     private static let promptBudget = 2800
     private static let messageBudget = 1200
 
@@ -13,7 +14,11 @@ enum Handoff {
         base.appending(path: "c").appending(path: remoteChatID)
     }
 
-    static func url(conversationID: String, messages: [ChatMessage]) -> URL? {
+    static func url(conversationID: String, messages: [ChatMessage], claude: Bool = false) -> URL? {
+        if claude {
+            guard let prompt = prompt(for: messages) else { return nil }
+            return url(prompt: prompt, base: claudeBase)
+        }
         if conversationID.hasPrefix(ChatThread.gptPrefix) {
             let remoteID = String(conversationID.dropFirst(ChatThread.gptPrefix.count))
             if !remoteID.isEmpty { return url(remoteChatID: remoteID) }
@@ -22,7 +27,7 @@ enum Handoff {
         return url(prompt: prompt)
     }
 
-    static func url(prompt: String) -> URL? {
+    static func url(prompt: String, base: URL = base) -> URL? {
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
         components.queryItems = [URLQueryItem(name: "q", value: prompt)]
         if let query = components.percentEncodedQuery {
@@ -39,7 +44,7 @@ enum Handoff {
         var used = 0
         var omitted = false
         for message in usable.reversed() {
-            let speaker = message.role == .user ? "Я" : "ChatGPT"
+            let speaker = message.role == .user ? "Я" : (message.claude == true ? "Claude" : "ChatGPT")
             let line = "\(speaker): \(clip(message.text, messageBudget))"
             let size = line.utf8.count + 2
             if used + size > promptBudget {

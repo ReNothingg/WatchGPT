@@ -44,8 +44,20 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     var date = Date.now
     var fromGPT: Bool?
     var refine: Refinement?
+    var claude: Bool?
 
     var modelText: String { refine?.prompt ?? text }
+}
+
+enum Provider: String, Codable, CaseIterable, Sendable {
+    case chatgpt, claude
+
+    var title: String {
+        switch self {
+        case .chatgpt: return "ChatGPT"
+        case .claude: return "Claude"
+        }
+    }
 }
 
 struct ModelOption: Codable, Identifiable, Hashable, Sendable {
@@ -57,6 +69,7 @@ struct ModelOption: Codable, Identifiable, Hashable, Sendable {
     var supportsVerbosity: Bool
     var priority: Int
     var supportsFast: Bool?
+    var thinking: Bool?
 
     var id: String { slug }
 
@@ -68,6 +81,13 @@ struct ModelOption: Codable, Identifiable, Hashable, Sendable {
         .init(slug: "gpt-6-luna", displayName: "GPT-6-Luna", summary: "Быстрая и лёгкая", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium", supportsVerbosity: true, priority: 4),
         .init(slug: "gpt-5.6-sol", displayName: "GPT-5.6-Sol", summary: "Старое поколение", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 5),
         .init(slug: "gpt-5.5", displayName: "GPT-5.5", summary: "Устаревшая", efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "medium", supportsVerbosity: true, priority: 13),
+    ]
+
+    static let claudeFallback: [ModelOption] = [
+        .init(slug: "claude-opus-5-5", displayName: "Claude Opus 5.5", summary: AnthropicClient.summary("claude-opus-5-5"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 1, supportsFast: false, thinking: true),
+        .init(slug: "claude-sonnet-5-5", displayName: "Claude Sonnet 5.5", summary: AnthropicClient.summary("claude-sonnet-5-5"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 2, supportsFast: false, thinking: true),
+        .init(slug: "claude-haiku-5-5", displayName: "Claude Haiku 5.5", summary: AnthropicClient.summary("claude-haiku-5-5"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 3, supportsFast: false, thinking: true),
+        .init(slug: "claude-fable-5-1", displayName: "Claude Fable 5.1", summary: AnthropicClient.summary("claude-fable-5-1"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 4, supportsFast: false, thinking: true),
     ]
 
     static func effortRank(_ effort: String) -> Int {
@@ -115,6 +135,8 @@ struct ChatThread: Codable, Identifiable, Equatable, Sendable {
     var messageCount: Int { messages.count }
 
     var isFromGPT: Bool { id.hasPrefix(Self.gptPrefix) }
+
+    var isClaude: Bool { messages.last { $0.role == .assistant && !$0.isError }?.claude == true }
 
     private static func clip(_ text: String, _ limit: Int) -> String {
         let flat = text

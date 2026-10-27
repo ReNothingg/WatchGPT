@@ -35,6 +35,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>OpenAIAPIKey</key>
 	<string>$(OPENAI_API_KEY)</string>
+	<key>AnthropicAPIKey</key>
+	<string>$(ANTHROPIC_API_KEY)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон нужен, чтобы вы могли задавать вопросы голосом.</string>
 	<key>NSUserActivityTypes</key>

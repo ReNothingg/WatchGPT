@@ -44,6 +44,7 @@
 		C4FE1C6F126315B35078A7A7 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B6BBE8F88BFFE5F19C97188 /* AuthService.swift */; };
 		C7A1D0E2B4F6A8C0D2E4F601 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A1D0E2B4F6A8C0D2E4F602 /* HistoryView.swift */; };
 		C7A1D0E2B4F6A8C0D2E4F603 /* VoiceOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A1D0E2B4F6A8C0D2E4F604 /* VoiceOrb.swift */; };
+		A1C1A0DE5EC1A0DE00000002 /* AnthropicClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C1A0DE5EC1A0DE00000001 /* AnthropicClient.swift */; };
 		D83DD68F93CE64286710C57A /* ChatGPTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */; };
 		DDAC50715972EAB421759B4A /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA3FA1FC4E806F6D63CAF99 /* Transcriber.swift */; };
 		DE6647CEA4726231F7FEDED7 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44ABD7AB089EE540B1B74190 /* Theme.swift */; };
@@ -98,6 +99,7 @@
 		50BE7550457E9C3C44327FB2 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
 		5EF63B64BE7D6AD6F68E2CF0 /* OAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuth.swift; sourceTree = "<group>"; };
 		5F864EA057EA60633EE8481E /* WatchGPT.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchGPT.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1C1A0DE5EC1A0DE00000001 /* AnthropicClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicClient.swift; sourceTree = "<group>"; };
 		682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTClient.swift; sourceTree = "<group>"; };
 		68B0B96675C5305620AC8BD0 /* MathFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathFormat.swift; sourceTree = "<group>"; };
 		6E35406A0C9AACEC81F45B0A /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
@@ -249,6 +251,7 @@
 		DD2CAB55D9DF10D66CE053F4 /* API */ = {
 			isa = PBXGroup;
 			children = (
+				A1C1A0DE5EC1A0DE00000001 /* AnthropicClient.swift */,
 				682A57EB1B6946F973FB7A81 /* ChatGPTClient.swift */,
 				E7C1A0DE00000000000000C2 /* ClientVersion.swift */,
 				49C9C6E115012AD1A9E6BB68 /* ChatModels.swift */,
@@ -397,6 +400,7 @@
 				FB1FB03505CBA10B7F9E902B /* AudioRecorder.swift in Sources */,
 				C4FE1C6F126315B35078A7A7 /* AuthService.swift in Sources */,
 				7B972C9AE12252468D7DB5FD /* AuthTokens.swift in Sources */,
+				A1C1A0DE5EC1A0DE00000002 /* AnthropicClient.swift in Sources */,
 				D83DD68F93CE64286710C57A /* ChatGPTClient.swift in Sources */,
 				1FB96D7A01727E4B626314AD /* ChatModels.swift in Sources */,
 				D1A7C0DE0000000000000B05 /* GPTChatView.swift in Sources */,

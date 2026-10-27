@@ -12,6 +12,7 @@ enum Theme {
     static let track = Color(red: 0.227, green: 0.227, blue: 0.235)
     static let secondaryText = Color(red: 0.557, green: 0.557, blue: 0.576)
     static let fast = Color(red: 1.0, green: 0.839, blue: 0.039)
+    static let claude = Color(red: 0.851, green: 0.467, blue: 0.341)
     static let danger = Color(red: 1.0, green: 0.271, blue: 0.227)
 
     static func usageColor(_ remainingPercent: Double) -> Color {

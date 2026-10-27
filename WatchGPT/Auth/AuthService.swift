@@ -28,6 +28,8 @@ final class AuthService {
     }
 
     private static let bundledKeyFingerprint = "apikey.bundledFingerprint"
+    private static let claudeKeyAccount = "anthropic.apikey"
+    private static let bundledClaudeFingerprint = "claudekey.bundledFingerprint"
 
     private(set) var phase: Phase
     private(set) var tokens: AuthTokens?
@@ -35,6 +37,10 @@ final class AuthService {
     private(set) var apiKey: StoredAPIKey?
     private(set) var apiKeyError: String?
     private(set) var keyCheck: KeyCheck = .unknown
+    private(set) var claudeKey: StoredAPIKey?
+    private(set) var claudeKeyCheck: KeyCheck = .unknown
+
+    var hasClaudeKey: Bool { claudeKey != nil }
 
     enum KeyCheck: Equatable {
         case unknown
@@ -54,6 +60,8 @@ final class AuthService {
         phase = stored == nil ? .signedOut : .signedIn
         apiKey = Keychain.load(StoredAPIKey.self, account: Self.apiKeyAccount)
         applyBundledAPIKey()
+        claudeKey = Keychain.load(StoredAPIKey.self, account: Self.claudeKeyAccount)
+        applyBundledClaudeKey()
     }
 
     private func applyBundledAPIKey() {
@@ -67,6 +75,56 @@ final class AuthService {
         setAPIKey(StoredAPIKey(key: key, isManual: true, fromBuild: true))
         apiKeyError = nil
         Task { await self.verifyAPIKey() }
+    }
+
+    private func applyBundledClaudeKey() {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "AnthropicAPIKey") as? String else { return }
+        let key = raw.filter { !$0.isWhitespace && $0 != "\"" }
+        guard key.hasPrefix("sk-ant-") else { return }
+        let fingerprint = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: Self.bundledClaudeFingerprint) != fingerprint else { return }
+        defaults.set(fingerprint, forKey: Self.bundledClaudeFingerprint)
+        setClaudeKey(StoredAPIKey(key: key, isManual: true, fromBuild: true))
+        Task { await self.verifyClaudeKey() }
+    }
+
+    // MARK: Anthropic API key (Claude)
+
+    func setManualClaudeKey(_ raw: String) {
+        let key = raw.filter { !$0.isWhitespace && $0 != "\"" && $0 != "'" }
+        guard !key.isEmpty else { return }
+        setClaudeKey(StoredAPIKey(key: key, isManual: true))
+        Task { await verifyClaudeKey() }
+    }
+
+    func clearClaudeKey() {
+        claudeKey = nil
+        claudeKeyCheck = .unknown
+        Keychain.delete(account: Self.claudeKeyAccount)
+    }
+
+    func verifyClaudeKey() async {
+        guard let key = claudeKey?.key else {
+            claudeKeyCheck = .unknown
+            return
+        }
+        claudeKeyCheck = .checking
+        do {
+            _ = try await AnthropicClient(apiKey: key).fetchModels()
+            guard claudeKey?.key == key else { return }
+            claudeKeyCheck = .valid
+        } catch {
+            guard claudeKey?.key == key else { return }
+            claudeKeyCheck = .invalid(error.localizedDescription)
+            DiagnosticsLog.shared.record(.answer, message: "Ключ Anthropic не прошёл проверку", detail: error.localizedDescription)
+        }
+    }
+
+    private func setClaudeKey(_ value: StoredAPIKey) {
+        claudeKey = value
+        claudeKeyCheck = .unknown
+        Keychain.save(value, account: Self.claudeKeyAccount)
     }
 
     // MARK: OpenAI API key (speech-to-text)

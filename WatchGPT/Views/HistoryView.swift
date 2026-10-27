@@ -352,6 +352,15 @@ private struct GPTBadge: View {
     }
 }
 
+private struct ClaudeBadge: View {
+    var body: some View {
+        Image(systemName: "asterisk")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Theme.claude)
+            .accessibilityLabel("Claude")
+    }
+}
+
 private struct Entrance: ViewModifier {
     let index: Int
     let appeared: Bool
@@ -406,6 +415,9 @@ private struct LatestChatCard: View {
                         .monospacedDigit()
                     if chat.isFromGPT {
                         GPTBadge()
+                            .padding(.leading, 2)
+                    } else if chat.isClaude {
+                        ClaudeBadge()
                             .padding(.leading, 2)
                     }
                     Spacer(minLength: 4)
@@ -504,6 +516,8 @@ private struct ChatRow: View {
                     }
                     if chat.isFromGPT {
                         GPTBadge()
+                    } else if chat.isClaude {
+                        ClaudeBadge()
                     }
                     Text(ChatDate.short(chat.updatedAt))
                         .foregroundStyle(isOpen ? Theme.accent : Theme.secondaryText)

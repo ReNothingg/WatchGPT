@@ -52,6 +52,7 @@ targets:
         WKWatchOnly: true
         AppGroupID: $(APP_GROUP)
         OpenAIAPIKey: $(OPENAI_API_KEY)
+        AnthropicAPIKey: $(ANTHROPIC_API_KEY)
         NSMicrophoneUsageDescription: Микрофон нужен, чтобы вы могли задавать вопросы голосом.
         WKBackgroundModes: [audio, self-care]
         NSUserActivityTypes: [watchgpt.chat]

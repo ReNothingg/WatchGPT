@@ -132,7 +132,7 @@ struct ChatThread: Codable, Identifiable, Equatable, Sendable {
         self.updatedAt = kept.last?.date ?? question.date
     }
 
-    var messageCount: Int { messages.count П}
+    var messageCount: Int { messages.count }
 
     var isFromGPT: Bool { id.hasPrefix(Self.gptPrefix) }
 

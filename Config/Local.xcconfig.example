@@ -1,2 +1,2 @@
-# Do not put API keys in xcconfig files: they can be embedded in app bundles.
-# Enter keys on the watch in Settings, or sign in to ChatGPT for automatic OpenAI key retrieval.
+// Do not put API keys in xcconfig files: they can be embedded in app bundles.
+// Enter keys on the watch in Settings, or sign in to ChatGPT for automatic OpenAI key retrieval.

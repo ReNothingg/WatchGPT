@@ -1,5 +1,7 @@
 import Foundation
+import ImageIO
 import Observation
+import UIKit
 
 @MainActor
 @Observable
@@ -20,6 +22,12 @@ final class GPTHistory {
     @ObservationIgnored private var blockedUntil: Date?
     @ObservationIgnored private var cache: [String: RemoteConversation] = [:]
     @ObservationIgnored private var cacheOrder: [String] = []
+    @ObservationIgnored private let pictures: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 16
+        cache.totalCostLimit = 24 * 1024 * 1024
+        return cache
+    }()
 
     private static let maxChats = 300
     private static let maxCached = 8
@@ -119,6 +127,31 @@ final class GPTHistory {
         return conversation
     }
 
+    func cachedImage(_ image: RemoteImage) -> UIImage? {
+        pictures.object(forKey: image.pointer as NSString)
+    }
+
+    func image(_ image: RemoteImage, conversationID: String) async throws -> UIImage {
+        if let cached = cachedImage(image) { return cached }
+        let data = try await withClient { try await $0.imageData(pointer: image.pointer, conversationID: conversationID) }
+        let decoded = await Task.detached(priority: .userInitiated) { Self.thumbnail(data, maxPixel: 720) }.value
+        guard let decoded else { throw ChatGPTClient.HistoryError.unreadable }
+        let picture = UIImage(cgImage: decoded)
+        pictures.setObject(picture, forKey: image.pointer as NSString, cost: decoded.bytesPerRow * decoded.height)
+        return picture
+    }
+
+    nonisolated private static func thumbnail(_ data: Data, maxPixel: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
     func clear() {
         chats = []
         phase = .idle
@@ -130,6 +163,7 @@ final class GPTHistory {
         blockedUntil = nil
         cache = [:]
         cacheOrder = []
+        pictures.removeAllObjects()
         DiskWriter.shared.remove(Self.fileURL)
     }
 

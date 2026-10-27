@@ -12,6 +12,62 @@ struct RemoteConversation: Equatable, Sendable {
     var title: String
     var updatedAt: Date
     var messages: [ChatMessage]
+    var images: [UUID: [RemoteImage]] = [:]
+    var reasoning: [UUID: Reasoning] = [:]
+    var live: LiveTurn?
+}
+
+struct RemoteImage: Equatable, Hashable, Identifiable, Sendable {
+    var pointer: String
+    var width: Int?
+    var height: Int?
+
+    var id: String { pointer }
+
+    var aspect: Double {
+        guard let width, let height, width > 0, height > 0 else { return 1 }
+        return min(2, max(0.5, Double(width) / Double(height)))
+    }
+}
+
+struct ReasoningStep: Equatable, Identifiable, Sendable {
+    var id: Int
+    var title: String
+    var detail: String
+    var icon: String?
+}
+
+struct Reasoning: Equatable, Sendable {
+    var steps: [ReasoningStep] = []
+    var seconds: Int?
+
+    var isEmpty: Bool { steps.isEmpty && seconds == nil }
+
+    static let maxSteps = 40
+
+    mutating func add(title: String, detail: String, icon: String? = nil) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty || !detail.isEmpty else { return }
+        if let last = steps.last, last.title == title, last.icon == icon, last.detail.isEmpty || detail.isEmpty || last.detail == detail {
+            if last.detail.isEmpty { steps[steps.count - 1].detail = detail }
+            return
+        }
+        steps.append(ReasoningStep(id: (steps.last?.id ?? -1) + 1, title: title, detail: detail, icon: icon))
+        if steps.count > Self.maxSteps { steps.removeFirst(steps.count - Self.maxSteps) }
+    }
+
+    mutating func absorb(_ other: Reasoning) {
+        for step in other.steps { add(title: step.title, detail: step.detail, icon: step.icon) }
+        if let seconds = other.seconds { self.seconds = (self.seconds ?? 0) + seconds }
+    }
+}
+
+struct LiveTurn: Equatable, Sendable {
+    var startedAt: Date
+    var stage: String
+    var icon: String
+    var reasoning: Reasoning
 }
 
 extension ChatGPTClient {
@@ -103,7 +159,7 @@ extension ChatGPTClient {
         }
     }
 
-    static func conversation(from obj: [String: Any], id: String) throws -> RemoteConversation {
+    static func conversation(from obj: [String: Any], id: String, now: Date = .now) throws -> RemoteConversation {
         guard let mapping = obj["mapping"] as? [String: [String: Any]] else { throw HistoryError.unreadable }
 
         let updatedAt = date(obj["update_time"]) ?? date(obj["create_time"]) ?? .now
@@ -116,14 +172,53 @@ extension ChatGPTClient {
         }
 
         var messages: [ChatMessage] = []
+        var images: [UUID: [RemoteImage]] = [:]
+        var reasoning: [UUID: Reasoning] = [:]
+        var pending = Reasoning()
+        var turnStart: Date?
+        var turnAnswer: UUID?
+        var lastRaw: [String: Any]?
+
         for raw in chain.reversed() {
-            guard let message = message(from: raw, fallbackDate: updatedAt) else { continue }
+            if role(raw) == "system" { continue }
+            lastRaw = raw
+            collectReasoning(raw, into: &pending)
+            guard let parsed = message(from: raw, fallbackDate: updatedAt) else { continue }
+            let (message, pictures) = parsed
+
+            let target: UUID
             if message.role == .assistant, let last = messages.last, last.role == .assistant {
-                messages[messages.count - 1].text = HistoryText.clip(last.text + "\n\n" + message.text)
+                let joined = [last.text, message.text].filter { !$0.isEmpty }.joined(separator: "\n\n")
+                messages[messages.count - 1].text = HistoryText.clip(joined)
                 messages[messages.count - 1].date = message.date
+                target = last.id
             } else {
                 messages.append(message)
+                target = message.id
             }
+            if !pictures.isEmpty { images[target, default: []] += pictures }
+
+            switch message.role {
+            case .user:
+                turnStart = message.date
+                turnAnswer = nil
+                pending = Reasoning()
+            case .assistant:
+                turnAnswer = target
+                if !pending.isEmpty {
+                    reasoning[target, default: Reasoning()].absorb(pending)
+                    pending = Reasoning()
+                }
+            }
+        }
+
+        var live: LiveTurn?
+        if let lastRaw, let turnStart, isUnfinished(lastRaw, now: now) {
+            var current = Reasoning()
+            if let turnAnswer, let attached = reasoning.removeValue(forKey: turnAnswer) { current = attached }
+            current.absorb(pending)
+            let phase = stage(of: lastRaw, reasoning: current)
+            live = LiveTurn(startedAt: turnStart, stage: phase.0, icon: phase.1, reasoning: current)
         }
 
         let title = (obj["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -131,7 +226,10 @@ extension ChatGPTClient {
             id: id,
             title: title.isEmpty ? "Без названия" : title,
             updatedAt: updatedAt,
-            messages: messages
+            messages: messages,
+            images: images,
+            reasoning: reasoning,
+            live: live
         )
     }
 
@@ -143,8 +241,16 @@ extension ChatGPTClient {
         return leaves.max { created($0.value) < created($1.value) }?.key
     }
 
-    private static func message(from raw: [String: Any], fallbackDate: Date) -> ChatMessage? {
-        let roleName = (raw["author"] as? [String: Any])?["role"] as? String ?? ""
+    private static func role(_ raw: [String: Any]) -> String {
+        (raw["author"] as? [String: Any])?["role"] as? String ?? ""
+    }
+
+    private static func contentType(_ raw: [String: Any]) -> String {
+        (raw["content"] as? [String: Any])?["content_type"] as? String ?? ""
+    }
+
+    private static func message(from raw: [String: Any], fallbackDate: Date) -> (ChatMessage, [RemoteImage])? {
+        let roleName = role(raw)
         let recipient = raw["recipient"] as? String ?? "all"
         let metadata = raw["metadata"] as? [String: Any]
         guard recipient == "all",
@@ -155,6 +261,7 @@ extension ChatGPTClient {
         let type = content["content_type"] as? String ?? ""
         guard type == "text" || type == "multimodal_text" else { return nil }
         let parts = content["parts"] as? [Any] ?? []
+        let pictures = imageParts(parts)
 
         let role: ChatMessage.Role
         let text: String
@@ -166,16 +273,174 @@ extension ChatGPTClient {
             role = .assistant
             text = HistoryText.clean(partsText(parts))
         case "tool":
-            guard imageCount(parts) > 0 else { return nil }
+            guard !pictures.isEmpty else { return nil }
             role = .assistant
-            text = imageLabel(imageCount(parts))
+            text = imageLabel(pictures.count)
         default:
             return nil
         }
         guard !text.isEmpty else { return nil }
 
         let date = number(raw["create_time"]).map { Date(timeIntervalSince1970: $0) } ?? fallbackDate
-        return ChatMessage(id: stableID(raw["id"] as? String), role: role, text: text, date: date, fromGPT: true)
+        let message = ChatMessage(id: stableID(raw["id"] as? String), role: role, text: text, date: date, fromGPT: true)
+        return (message, pictures)
+    }
+
+    private static func collectReasoning(_ raw: [String: Any], into reasoning: inout Reasoning) {
+        let metadata = raw["metadata"] as? [String: Any]
+        let content = raw["content"] as? [String: Any] ?? [:]
+        let recipient = raw["recipient"] as? String ?? "all"
+
+        switch content["content_type"] as? String ?? "" {
+        case "thoughts":
+            for thought in content["thoughts"] as? [[String: Any]] ?? [] {
+                let summary = thought["summary"] as? String ?? ""
+                var body = thought["content"] as? String ?? ""
+                if body.isEmpty, let chunks = thought["chunks"] as? [String] { body = chunks.joined(separator: " ") }
+                reasoning.add(title: HistoryText.plain(summary, limit: 120), detail: HistoryText.plain(body, limit: 1200))
+            }
+        case "reasoning_recap":
+            if reasoning.seconds == nil {
+                reasoning.seconds = number(metadata?["finished_duration_sec"]).map { Int($0.rounded()) }
+                    ?? (content["content"] as? String).flatMap(seconds(fromRecap:))
+            }
+        default:
+            if role(raw) == "assistant", recipient != "all" {
+                let (title, icon) = toolStage(recipient)
+                reasoning.add(title: title, detail: toolDetail(content), icon: icon)
+            }
+        }
+
+        if reasoning.seconds == nil, let seconds = number(metadata?["finished_duration_sec"]), seconds > 0 {
+            reasoning.seconds = Int(seconds.rounded())
+        }
+    }
+
+    private static func isUnfinished(_ raw: [String: Any], now: Date) -> Bool {
+        let status = raw["status"] as? String ?? ""
+        let recipient = raw["recipient"] as? String ?? "all"
+        let type = contentType(raw)
+        let parts = (raw["content"] as? [String: Any])?["parts"] as? [Any] ?? []
+
+        let finished: Bool
+        switch role(raw) {
+        case "assistant":
+            let isAnswer = recipient == "all" && (type == "text" || type == "multimodal_text")
+            finished = isAnswer && (status == "finished_partial_completion"
+                || (status != "in_progress" && raw["end_turn"] as? Bool != false))
+        case "tool":
+            finished = !imageParts(parts).isEmpty && status == "finished_successfully"
+        default:
+            finished = false
+        }
+        guard !finished else { return false }
+
+        let activity = number(raw["update_time"]) ?? number(raw["create_time"])
+        guard let activity else { return false }
+        return now.timeIntervalSince1970 - activity < 15 * 60
+    }
+
+    private static func stage(of raw: [String: Any], reasoning: Reasoning) -> (String, String) {
+        let recipient = raw["recipient"] as? String ?? "all"
+        switch role(raw) {
+        case "user":
+            let parts = (raw["content"] as? [String: Any])?["parts"] as? [Any] ?? []
+            return imageParts(parts).isEmpty ? ("Думает", "brain") : ("Смотрит на изображение", "eye")
+        case "tool":
+            let name = (raw["author"] as? [String: Any])?["name"] as? String ?? ""
+            let (title, icon) = toolStage(name)
+            return name.isEmpty ? ("Изучает результаты", "doc.text.magnifyingglass") : (title, icon)
+        default:
+            break
+        }
+        if recipient != "all" { return toolStage(recipient) }
+        switch contentType(raw) {
+        case "thoughts":
+            let summary = reasoning.steps.last { $0.icon == nil }?.title ?? ""
+            return (summary.isEmpty ? "Думает" : summary, "brain")
+        case "text", "multimodal_text", "reasoning_recap":
+            return ("Пишет ответ", "pencil")
+        default:
+            return ("Думает", "brain")
+        }
+    }
+
+    static func toolStage(_ name: String) -> (String, String) {
+        let n = name.lowercased()
+        if n.hasPrefix("web") || n.contains("browser") || n.contains("search") {
+            return ("Ищет в интернете", "globe")
+        }
+        if n.contains("dalle") || n.contains("image") || n.contains("t2uay3k") {
+            return ("Рисует изображение", "paintbrush")
+        }
+        if n.contains("python") || n.contains("code") || n.contains("container") {
+            return ("Запускает код", "terminal")
+        }
+        if n.contains("file") || n.contains("doc") {
+            return ("Читает файлы", "doc.text")
+        }
+        if n.hasPrefix("bio") || n.contains("memory") {
+            return ("Обновляет память", "brain.head.profile")
+        }
+        if n.contains("canmore") || n.contains("canvas") {
+            return ("Пишет в холсте", "doc.richtext")
+        }
+        if n.contains("research") {
+            return ("Исследует", "magnifyingglass")
+        }
+        return ("Использует инструменты", "wrench.and.screwdriver")
+    }
+
+    private static func toolDetail(_ content: [String: Any]) -> String {
+        let text = (content["text"] as? String) ?? ((content["parts"] as? [Any])?.compactMap { $0 as? String }.joined(separator: "\n")) ?? ""
+        guard !text.isEmpty else { return "" }
+        if let data = text.data(using: .utf8), let json = try? JSONSerialization.jsonObject(with: data) {
+            var found: [String] = []
+            collectQueries(json, into: &found)
+            return found.prefix(3).map { "«\($0)»" }.joined(separator: "\n")
+        }
+        return ""
+    }
+
+    private static func collectQueries(_ any: Any, into found: inout [String]) {
+        guard found.count < 3 else { return }
+        if let dict = any as? [String: Any] {
+            for key in ["q", "query", "prompt", "search_query", "queries"] {
+                if let value = dict[key] as? String {
+                    let flat = HistoryText.plain(value, limit: 120)
+                    if !flat.isEmpty, !found.contains(flat) { found.append(flat) }
+                }
+            }
+            for value in dict.values where !(value is String) { collectQueries(value, into: &found) }
+        } else if let array = any as? [Any] {
+            for value in array {
+                if let string = value as? String {
+                    let flat = HistoryText.plain(string, limit: 120)
+                    if !flat.isEmpty, !found.contains(flat), found.count < 3 { found.append(flat) }
+                } else {
+                    collectQueries(value, into: &found)
+                }
+            }
+        }
+    }
+
+    static func seconds(fromRecap text: String) -> Int? {
+        let pattern = #"(\d+)\s*(h|ч|m|мин|s|с|сек)?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        var total = 0
+        var matched = false
+        for match in regex.matches(in: text, range: range) {
+            guard let numberRange = Range(match.range(at: 1), in: text), let value = Int(text[numberRange]) else { continue }
+            let unit = Range(match.range(at: 2), in: text).map { text[$0].lowercased() } ?? "s"
+            switch unit {
+            case "h", "ч": total += value * 3600
+            case "m", "мин": total += value * 60
+            default: total += value
+            }
+            matched = true
+        }
+        return matched ? total : nil
     }
 
     private static func stableID(_ raw: String?) -> UUID {
@@ -202,17 +467,60 @@ extension ChatGPTClient {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
-        let images = imageCount(parts)
+        let images = imageParts(parts).count
         guard images > 0 else { return text }
         return text.isEmpty ? imageLabel(images) : imageLabel(images) + "\n" + text
     }
 
-    private static func imageCount(_ parts: [Any]) -> Int {
-        parts.filter { ($0 as? [String: Any])?["content_type"] as? String == "image_asset_pointer" }.count
+    private static func imageParts(_ parts: [Any]) -> [RemoteImage] {
+        parts.compactMap { part in
+            guard let dict = part as? [String: Any],
+                  dict["content_type"] as? String == "image_asset_pointer",
+                  let pointer = dict["asset_pointer"] as? String, !pointer.isEmpty else { return nil }
+            return RemoteImage(
+                pointer: pointer,
+                width: number(dict["width"]).map { Int($0) },
+                height: number(dict["height"]).map { Int($0) }
+            )
+        }
     }
 
     private static func imageLabel(_ count: Int) -> String {
-        count == 1 ? "🖼 Изображение" : "🖼 Изображения: \(count)"
+        count == 1 ? "\(HistoryText.imageMark) Изображение" : "\(HistoryText.imageMark) Изображения: \(count)"
+    }
+
+    func imageData(pointer: String, conversationID: String) async throws -> Data {
+        guard let separator = pointer.range(of: "://") else { throw HistoryError.unreadable }
+        let scheme = pointer[..<separator.lowerBound]
+        let fileID = String(pointer[separator.upperBound...])
+        guard !fileID.isEmpty else { throw HistoryError.unreadable }
+
+        let infoURL: URL
+        if scheme == "sediment" {
+            var components = URLComponents(url: Self.baseURL.appending(path: "files/download").appending(path: fileID), resolvingAgainstBaseURL: false)!
+            components.queryItems = [
+                URLQueryItem(name: "conversation_id", value: conversationID),
+                URLQueryItem(name: "inline", value: "false"),
+            ]
+            infoURL = components.url!
+        } else {
+            infoURL = Self.baseURL.appending(path: "files").appending(path: fileID).appending(path: "download")
+        }
+
+        let info = try await getJSON(infoURL)
+        guard let link = info["download_url"] as? String,
+              let url = URL(string: link, relativeTo: URL(string: "https://chatgpt.com")!)?.absoluteURL else {
+            throw HistoryError.unreadable
+        }
+
+        var request = url.host?.hasSuffix("chatgpt.com") == true ? makeRequest(url, method: "GET") : URLRequest(url: url)
+        request.timeoutInterval = 40
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status), !data.isEmpty else {
+            throw APIError.http(status, "Картинка не загрузилась (\(status)).")
+        }
+        return data
     }
 
     private static let preciseDates: ISO8601DateFormatter = {
@@ -232,6 +540,19 @@ extension ChatGPTClient {
 
 enum HistoryText {
     static let limit = 6000
+    static let imageMark = "🖼"
+
+    static func withoutImageLabel(_ text: String) -> String {
+        guard text.hasPrefix(imageMark) else { return text }
+        let rest = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).dropFirst().first ?? ""
+        return rest.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func plain(_ text: String, limit: Int) -> String {
+        let cleaned = clean(text)
+        guard cleaned.count > limit else { return cleaned }
+        return String(cleaned.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
 
     static func clean(_ text: String) -> String {
         var s = text

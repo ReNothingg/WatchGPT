@@ -847,7 +847,6 @@ struct VoiceSettingsView: View {
 
     private var keyStatus: String {
         guard let key = auth.apiKey else { return "нет" }
-        if key.fromBuild == true { return "из сборки" }
         return key.isManual ? "свой" : "из аккаунта"
     }
 
@@ -986,7 +985,7 @@ struct ClaudeSettingsView: View {
 
     private var keyStatus: String {
         guard let key = auth.claudeKey else { return "нет" }
-        return key.fromBuild == true ? "из сборки" : "свой"
+        return key.isManual ? "свой" : "из аккаунта"
     }
 }
 

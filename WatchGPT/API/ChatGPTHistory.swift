@@ -129,6 +129,21 @@ extension ChatGPTClient {
         return ChatPage(items: items, nextOffset: nextOffset, nextCursor: nextCursor)
     }
 
+    enum StreamState: Sendable {
+        case streaming, complete, failed, unknown
+    }
+
+    func streamState(id: String) async -> StreamState {
+        let url = Self.baseURL.appending(path: "conversation").appending(path: id).appending(path: "stream_status")
+        guard let obj = try? await getJSON(url) else { return .unknown }
+        switch obj["status"] as? String {
+        case "IS_STREAMING": return .streaming
+        case "COMPLETE": return .complete
+        case "FAILURE": return .failed
+        default: return .unknown
+        }
+    }
+
     func fetchConversation(id: String) async throws -> RemoteConversation {
         let obj = try await getJSON(Self.baseURL.appending(path: "conversation").appending(path: id))
         return try Self.conversation(from: obj, id: id)

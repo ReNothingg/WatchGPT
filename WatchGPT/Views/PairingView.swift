@@ -104,7 +104,7 @@ private struct WaitingForApproval: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .frame(height: 34)
-                .background(Capsule().fill(Theme.surface))
+                .glassBackground(Capsule(), interactive: true)
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)

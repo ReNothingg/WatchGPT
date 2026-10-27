@@ -33,7 +33,7 @@ struct SettingsView: View {
                     .padding(.leading, 12)
                     .padding(.trailing, 10)
                     .padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+                    .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous), interactive: true)
                     .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -152,35 +152,68 @@ private struct ToggleTile: View {
     var onColor: Color = Theme.accent
 
     var body: some View {
-        Button {
-            withAnimation(.snappy(duration: 0.2)) { isOn.toggle() }
-            WKHaptics.click()
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isOn ? onColor : Theme.secondaryText)
-                Spacer(minLength: 4)
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 58)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isOn ? onColor.opacity(0.22) : Theme.surface)
+        if #available(watchOS 26.0, *) {
+            styled(glassButton)
+        } else {
+            styled(
+                button
+                    .buttonStyle(.plain)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(isOn ? "включено" : "выключено")
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private func styled(_ content: some View) -> some View {
+        content
+            .accessibilityLabel(title)
+            .accessibilityValue(isOn ? "включено" : "выключено")
+            .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+
+    @available(watchOS 26.0, *)
+    @ViewBuilder
+    private var glassButton: some View {
+        if isOn {
+            Button(action: toggle) { label(glass: true) }
+                .buttonStyle(.glassProminent)
+                .tint(onColor)
+        } else {
+            Button(action: toggle) { label(glass: true) }
+                .buttonStyle(.glass)
+        }
+    }
+
+    private var button: some View {
+        Button(action: toggle) {
+            label(glass: false)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(isOn ? onColor.opacity(0.22) : Theme.surface)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private func toggle() {
+        withAnimation(.snappy(duration: 0.2)) { isOn.toggle() }
+        WKHaptics.click()
+    }
+
+    private func label(glass: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isOn ? (glass ? Color.black : onColor) : Theme.secondaryText)
+            Spacer(minLength: 4)
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(isOn && glass ? Color.black : .white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 58)
     }
 }
 
@@ -216,7 +249,7 @@ private struct AnswerFontCard: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+        .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 
@@ -233,7 +266,7 @@ private struct AnswerFontCard: View {
                 .foregroundStyle(enabled ? .white : Theme.secondaryText.opacity(0.5))
                 .frame(maxWidth: .infinity)
                 .frame(height: 32)
-                .background(Capsule().fill(Theme.raised))
+                .glassBackground(Capsule(), fill: Theme.raised, interactive: true)
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -249,7 +282,7 @@ private struct SettingsCard<Content: View>: View {
         VStack(spacing: 0) {
             content
         }
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+        .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
@@ -320,7 +353,7 @@ struct ModelPickerView: View {
                             .padding(.trailing, 10)
                             .padding(.vertical, 9)
                             .frame(minHeight: 44)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surfaceDim))
+                            .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous), fill: Theme.surfaceDim, interactive: true)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
                         .buttonStyle(.plain)
@@ -404,9 +437,11 @@ private struct ModelRow: View {
             .padding(.trailing, 10)
             .padding(.vertical, 9)
             .frame(minHeight: 44)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? Theme.surface : Theme.surfaceDim)
+            .glassBackground(
+                RoundedRectangle(cornerRadius: 14, style: .continuous),
+                fill: isSelected ? Theme.surface : Theme.surfaceDim,
+                tint: isSelected ? Theme.accent.opacity(0.18) : nil,
+                interactive: true
             )
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
@@ -1001,7 +1036,7 @@ private struct UsageHistoryChart: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface))
+        .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Расход лимита: сегодня \(Theme.percent(today)), за 7 дней \(Theme.percent(total))")
     }

@@ -44,7 +44,7 @@ struct HistoryView: View {
                 GPTHistorySections(appeared: appeared)
             }
         }
-        .listSectionSpacing(.compact)
+        .listSectionSpacing(6)
         .animation(.snappy(duration: 0.3), value: store.chats.map(\.id))
         .animation(.snappy(duration: 0.3), value: store.gptHistory.chats.map(\.id))
         .navigationTitle(source == .gpt ? "ChatGPT" : "Чаты")
@@ -83,13 +83,26 @@ private struct HistorySourcePicker: View {
     @Namespace private var selection
 
     var body: some View {
+        if #available(watchOS 26.0, *) {
+            segments
+                .padding(3)
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            segments
+                .padding(3)
+                .background(Capsule().fill(Theme.surface))
+                .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+        }
+    }
+
+    private var segments: some View {
         HStack(spacing: 2) {
             ForEach(HistorySource.allCases) { item in
                 let selected = item == source
                 Button {
                     WKHaptics.click()
                     if !selected {
-                        withAnimation(.snappy(duration: 0.3)) { source = item }
+                        withAnimation(.bouncy(duration: 0.4, extraBounce: 0.12)) { source = item }
                     }
                     onTap(item)
                 } label: {
@@ -122,9 +135,6 @@ private struct HistorySourcePicker: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-        .padding(3)
-        .background(Capsule().fill(Theme.surface))
-        .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -452,8 +462,8 @@ private struct CardBackground: View {
             let t = date.timeIntervalSinceReferenceDate
             let x = 0.5 + 0.5 * cos(t * 0.5)
             let y = 0.5 * sin(t * 0.4)
-            shape
-                .fill(Theme.surface)
+            Color.clear
+                .glassBackground(shape)
                 .overlay(
                     RadialGradient(
                         colors: [Theme.accent.opacity(0.38), Theme.accent.opacity(0.0)],

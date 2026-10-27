@@ -11,6 +11,7 @@ struct GPTChatView: View {
     @State private var visibleCount = Self.pageSize
     @State private var didScroll = false
     @State private var chromeVisible = true
+    @State private var streamFailed = false
     @Environment(\.scenePhase) private var scenePhase
 
     private static let pageSize = 30
@@ -62,10 +63,25 @@ struct GPTChatView: View {
         }
         .task(id: PollKey(live: conversation?.live != nil, phase: scenePhase)) {
             guard conversation?.live != nil, scenePhase != .background else { return }
+            var lastFetch = Date.now
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(PowerMonitor.shared.isLowPower ? 8 : 4))
+                let lowPower = PowerMonitor.shared.isLowPower
+                try? await Task.sleep(for: .seconds(lowPower ? 5 : 2))
                 guard !Task.isCancelled else { return }
-                await load(quiet: true)
+                let state = await store.gptHistory.streamState(chatID)
+                guard !Task.isCancelled else { return }
+                streamFailed = state == .failed
+                let every: TimeInterval
+                switch state {
+                case .streaming: every = lowPower ? 15 : 8
+                case .unknown: every = lowPower ? 8 : 4
+                case .complete: every = 0
+                case .failed: every = lowPower ? 20 : 10
+                }
+                if Date.now.timeIntervalSince(lastFetch) >= every {
+                    await load(quiet: true)
+                    lastFetch = .now
+                }
             }
         }
         .handoffActivity(isActive: store.handoff, title: title) {
@@ -93,7 +109,7 @@ struct GPTChatView: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 10)
                                 .frame(height: 28)
-                                .background(Capsule().fill(Theme.surface))
+                                .glassBackground(Capsule(), interactive: true)
                         }
                         .buttonStyle(PressableStyle(scale: 0.95))
                         .frame(maxWidth: .infinity)
@@ -120,7 +136,7 @@ struct GPTChatView: View {
                     }
 
                     if let live = conversation.live {
-                        LiveTurnCard(live: live)
+                        LiveTurnCard(live: live, failed: streamFailed)
                             .id("live")
                             .transition(.opacity)
                     }
@@ -174,7 +190,7 @@ struct GPTChatView: View {
                     .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
-                    .background(Capsule().fill(Theme.accent))
+                    .glassBackground(Capsule(), fill: Theme.accent, tint: Theme.accent, interactive: true)
             }
             .buttonStyle(PressableStyle(scale: 0.95))
             .disabled(store.isBusy || conversation.messages.isEmpty)
@@ -232,10 +248,10 @@ private struct HistoryBubble: View {
         switch message.role {
         case .user:
             VStack(alignment: .trailing, spacing: 4) {
-                ForEach(images) { image in
+                if !images.isEmpty {
                     HStack {
-                        Spacer(minLength: 36)
-                        RemoteImageView(image: image, conversationID: conversationID)
+                        Spacer(minLength: images.count == 1 ? 36 : 20)
+                        gallery
                     }
                 }
                 if !text.isEmpty {
@@ -244,20 +260,38 @@ private struct HistoryBubble: View {
                         MarkdownText(text: text, style: .footnote)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.bubble))
+                            .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous), fill: Theme.bubble)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         case .assistant:
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(images) { image in
-                    RemoteImageView(image: image, conversationID: conversationID)
-                }
+                if !images.isEmpty { gallery }
                 if !text.isEmpty {
                     MarkdownText(text: text, scale: store.answerFontScale)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .onTapGesture(count: 2) { store.speaker.toggle(text) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var gallery: some View {
+        if images.count == 1 {
+            RemoteImageView(image: images[0], conversationID: conversationID)
+        } else {
+            let rows = stride(from: 0, to: images.count, by: 2).map { Array(images[$0..<min($0 + 2, images.count)]) }
+            VStack(spacing: 4) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 4) {
+                        ForEach(row) { image in
+                            RemoteImageView(image: image, conversationID: conversationID, square: true)
+                        }
+                        if row.count == 1 {
+                            Color.clear.aspectRatio(1, contentMode: .fit)
+                        }
+                    }
                 }
             }
         }
@@ -268,6 +302,7 @@ private struct RemoteImageView: View {
     @Environment(ChatStore.self) private var store
     let image: RemoteImage
     let conversationID: String
+    var square = false
 
     @State private var picture: UIImage?
     @State private var failed = false
@@ -276,7 +311,7 @@ private struct RemoteImageView: View {
 
     var body: some View {
         Color.clear
-            .aspectRatio(image.aspect, contentMode: .fit)
+            .aspectRatio(square ? 1 : image.aspect, contentMode: .fit)
             .overlay {
                 if let picture {
                     Image(uiImage: picture)
@@ -371,7 +406,7 @@ private struct ReasoningSummary: View {
                 .minimumScaleFactor(0.8)
                 .padding(.horizontal, 8)
                 .frame(height: 24)
-                .background(Capsule().fill(Theme.surface))
+                .glassBackground(Capsule(), interactive: true)
             }
             .buttonStyle(PressableStyle(scale: 0.95))
 
@@ -419,35 +454,48 @@ private struct ReasoningSteps: View {
 
 private struct LiveTurnCard: View {
     let live: LiveTurn
+    var failed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
-                PulseOrb()
-                    .frame(width: 12, height: 12)
-                    .frame(width: 16, height: 16)
-                ShimmerText(text: live.stage, font: .footnote.weight(.medium))
-                    .lineLimit(2)
-                    .id(live.stage)
-                    .transition(.opacity.combined(with: .offset(y: 4)))
+                if failed {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .frame(width: 16, height: 16)
+                    Text("Ответ прервался")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.white)
+                } else {
+                    PulseOrb()
+                        .frame(width: 12, height: 12)
+                        .frame(width: 16, height: 16)
+                    ShimmerText(text: live.stage, font: .footnote.weight(.medium))
+                        .lineLimit(2)
+                        .id(live.stage)
+                        .transition(.opacity.combined(with: .offset(y: 4)))
+                }
                 Spacer(minLength: 4)
-                Text(timerInterval: live.startedAt...Date.distantFuture, countsDown: false)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(Theme.accent)
-                    .fixedSize()
+                if !failed {
+                    Text(timerInterval: live.startedAt...Date.distantFuture, countsDown: false)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(Theme.accent)
+                        .fixedSize()
+                }
             }
             .animation(.snappy(duration: 0.3), value: live.stage)
 
             if !live.reasoning.steps.isEmpty {
                 ReasoningSteps(steps: live.reasoning.steps, focusLast: true)
-            } else {
-                Text("ChatGPT ещё отвечает. Экран обновится сам, когда появятся новые шаги.")
+            } else if !failed {
+                Text("Текст и рассуждения придут целиком, как только ChatGPT закончит.")
                     .font(.caption2)
                     .foregroundStyle(Theme.secondaryText)
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface))
+        .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }
@@ -498,7 +546,7 @@ struct HistoryErrorView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
                 .frame(height: 28)
-                .background(Capsule().fill(Theme.surface))
+                .glassBackground(Capsule(), interactive: true)
             }
             .buttonStyle(PressableStyle(scale: 0.95))
         }

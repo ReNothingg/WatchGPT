@@ -288,7 +288,7 @@ private struct BusyCircle: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Theme.raised)
+            Color.clear.glassBackground(Circle(), fill: Theme.raised)
             LiveTimeline(role: .status) { date in
                 let t = date.timeIntervalSinceReferenceDate
                 Circle()
@@ -401,5 +401,21 @@ extension View {
         opacity(visible ? 1 : 0)
             .scaleEffect(visible ? 1 : 0.6)
             .allowsHitTesting(visible)
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func glassBackground<S: Shape>(
+        _ shape: S,
+        fill: Color = Theme.surface,
+        tint: Color? = nil,
+        interactive: Bool = false
+    ) -> some View {
+        if #available(watchOS 26.0, *) {
+            glassEffect(.regular.tint(tint).interactive(interactive), in: shape)
+        } else {
+            background(shape.fill(fill))
+        }
     }
 }

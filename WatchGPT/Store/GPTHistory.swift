@@ -127,6 +127,11 @@ final class GPTHistory {
         return conversation
     }
 
+    func streamState(_ id: String) async -> ChatGPTClient.StreamState {
+        guard let tokens = try? await auth.validTokens() else { return .unknown }
+        return await ChatGPTClient(tokens: tokens).streamState(id: id)
+    }
+
     func cachedImage(_ image: RemoteImage) -> UIImage? {
         pictures.object(forKey: image.pointer as NSString)
     }

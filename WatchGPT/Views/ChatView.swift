@@ -169,8 +169,7 @@ private struct HomeSideButton: View {
                 .font(.system(size: size * 0.42, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: size, height: size)
-                .background(Circle().fill(Theme.raised))
-                .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+                .glassBackground(Circle(), fill: Theme.raised, interactive: true)
                 .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
@@ -220,7 +219,7 @@ private struct MessageRow: View, Equatable {
                 MarkdownText(text: message.text, style: .footnote)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.bubble))
+                    .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous), fill: Theme.bubble)
             }
         case .assistant:
             if message.isError {
@@ -241,7 +240,7 @@ private struct MessageRow: View, Equatable {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 10)
                             .frame(height: 28)
-                            .background(Capsule().fill(Theme.surface))
+                            .glassBackground(Capsule(), interactive: true)
                         }
                         .buttonStyle(.plain)
                         .disabled(store.isBusy)
@@ -323,7 +322,7 @@ private struct RefineBar: View {
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity)
             .frame(height: 30)
-            .background(Capsule().fill(Theme.surface))
+            .glassBackground(Capsule(), interactive: true)
             .contentShape(Capsule())
         }
         .buttonStyle(PressableStyle(scale: 0.94))

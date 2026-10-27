@@ -85,7 +85,7 @@ struct DiagnosticsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+            .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous), interactive: true)
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -114,7 +114,7 @@ struct DiagnosticsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+            .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous), interactive: true)
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -155,7 +155,7 @@ struct DiagnosticsView: View {
                 .padding(.vertical, 7)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+        .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     @ViewBuilder
@@ -188,7 +188,7 @@ struct DiagnosticsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface))
+            .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
@@ -287,7 +287,7 @@ struct ClientVersionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+                .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .id(revision)
 
                 Button {

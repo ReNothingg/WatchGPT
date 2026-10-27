@@ -118,7 +118,7 @@ private struct HistorySourcePicker: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
-                    .foregroundStyle(selected ? Color.black : Theme.secondaryText)
+                    .foregroundStyle(selected ? Color.white : Theme.secondaryText)
                     .frame(maxWidth: .infinity)
                     .frame(height: 30)
                     .background {

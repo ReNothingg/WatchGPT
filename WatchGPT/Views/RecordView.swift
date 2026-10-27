@@ -150,13 +150,13 @@ private struct LiveSendButton: View {
                     if processing {
                         Image(systemName: "waveform")
                             .font(.system(size: 26, weight: .bold))
-                            .foregroundStyle(.black.opacity(0.85))
+                            .foregroundStyle(.white.opacity(0.85))
                             .symbolEffect(.variableColor.iterative.dimInactiveLayers)
                             .transition(.scale(scale: 0.3).combined(with: .opacity))
                     } else {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 30, weight: .bold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(.white)
                             .transition(.scale(scale: 0.3).combined(with: .opacity))
                     }
                 }

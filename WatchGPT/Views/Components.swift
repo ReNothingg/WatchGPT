@@ -244,7 +244,7 @@ struct MicCircle: View {
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [Color(red: 0.16, green: 0.80, blue: 0.62), Theme.accent],
+                        colors: [Color(red: 0.35, green: 0.68, blue: 1.0), Theme.accent],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -252,7 +252,7 @@ struct MicCircle: View {
                 .shadow(color: Theme.accent.opacity(halo ? 0.55 : 0.3), radius: halo ? size * 0.16 : 4)
             Image(systemName: "mic.fill")
                 .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(.black)
+                .foregroundStyle(.white)
         }
         .frame(width: size, height: size)
         .background {

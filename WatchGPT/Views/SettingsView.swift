@@ -41,7 +41,7 @@ struct SettingsView: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                     ToggleTile(title: "Поиск", icon: "globe", isOn: $store.webSearch)
                     if store.selectedModel.supportsFast == true {
-                        ToggleTile(title: "Fast", icon: "bolt.fill", isOn: $store.fastMode, onColor: Theme.fast)
+                        ToggleTile(title: "Fast", icon: "bolt.fill", isOn: $store.fastMode, onColor: Theme.fast, onText: .black)
                     }
                     ToggleTile(title: "Кратко", icon: "text.alignleft", isOn: $store.conciseAnswers)
                     ToggleTile(title: "Вслух", icon: "speaker.wave.2.fill", isOn: $store.autoSpeak)
@@ -150,6 +150,7 @@ private struct ToggleTile: View {
     let icon: String
     @Binding var isOn: Bool
     var onColor: Color = Theme.accent
+    var onText: Color = .white
 
     var body: some View {
         if #available(watchOS 26.0, *) {
@@ -181,6 +182,7 @@ private struct ToggleTile: View {
             Button(action: toggle) { glassLabel }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.roundedRectangle(radius: 18))
+                .tint(Theme.raised)
         }
     }
 
@@ -212,11 +214,11 @@ private struct ToggleTile: View {
         VStack(alignment: .leading, spacing: 0) {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isOn ? (glass ? Color.black : onColor) : Theme.secondaryText)
+                .foregroundStyle(isOn ? (glass ? onText : onColor) : Theme.secondaryText)
             Spacer(minLength: 4)
             Text(title)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(isOn && glass ? Color.black : .white)
+                .foregroundStyle(isOn && glass ? onText : .white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }

@@ -185,7 +185,7 @@ struct GPTChatView: View {
             } label: {
                 Label("Продолжить на часах", systemImage: "applewatch")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity)

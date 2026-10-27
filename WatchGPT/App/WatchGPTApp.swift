@@ -46,9 +46,9 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if auth.isSignedIn {
+            if true {
                 NavigationStack(path: Bindable(store).path) {
-                    ChatView()
+                    HistoryView()
                 }
             } else {
                 NavigationStack {

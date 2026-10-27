@@ -773,6 +773,7 @@ final class ChatStore {
             effort: requestEffort(model, selected: claudeEffort),
             thinking: model.thinking == true,
             webSearch: webSearch,
+            fast: fastMode && model.supportsFast == true,
             instructions: instructions(assistant: "Claude"),
             context: requestContext()
         )

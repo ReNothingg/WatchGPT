@@ -4,6 +4,7 @@ struct AnthropicClient: Sendable {
     static let baseURL = URL(string: "https://api.anthropic.com/v1")!
     static let apiVersion = "2026-10-21"
     static let fallbackBeta = "server-side-fallback-2026-07-01"
+    static let fastBeta = "fast-mode-2026-02-01"
     static let maxTokens = 32_000
 
     let apiKey: String
@@ -51,6 +52,7 @@ struct AnthropicClient: Sendable {
         var effort: String?
         var thinking: Bool
         var webSearch: Bool
+        var fast: Bool = false
         var instructions: String
         var context: String?
     }
@@ -79,8 +81,11 @@ struct AnthropicClient: Sendable {
         var request = makeRequest(Self.baseURL.appending(path: "messages"), method: "POST")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if Self.supportsFallbacks(options.model) {
-            request.setValue(Self.fallbackBeta, forHTTPHeaderField: "anthropic-beta")
+        var betas: [String] = []
+        if Self.supportsFallbacks(options.model) { betas.append(Self.fallbackBeta) }
+        if options.fast { betas.append(Self.fastBeta) }
+        if !betas.isEmpty {
+            request.setValue(betas.joined(separator: ","), forHTTPHeaderField: "anthropic-beta")
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: Self.body(messages: messages, options: options))
         request.timeoutInterval = 180
@@ -96,7 +101,13 @@ struct AnthropicClient: Sendable {
                 data.append(byte)
                 if data.count > 16_384 { break }
             }
-            throw Self.error(status: http.statusCode, body: data)
+            let error = Self.error(status: http.statusCode, body: data)
+            if options.fast, Self.fastUnavailable(error) {
+                var standard = options
+                standard.fast = false
+                return try await runStream(messages: messages, options: standard, continuation: continuation)
+            }
+            throw error
         }
 
         var sawText = false
@@ -193,11 +204,30 @@ struct AnthropicClient: Sendable {
         if supportsFallbacks(options.model) {
             body["fallbacks"] = "default"
         }
+        if options.fast {
+            body["speed"] = "fast"
+        }
         return body
     }
 
     static func supportsFallbacks(_ model: String) -> Bool {
         ["claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"].contains(model)
+    }
+
+    static func supportsFast(_ model: String) -> Bool {
+        ["claude-opus-5-5", "claude-opus-5", "claude-opus-4-8"].contains(model)
+    }
+
+    static func fastUnavailable(_ error: APIError) -> Bool {
+        switch error {
+        case .rateLimited, .overloaded:
+            return true
+        case let .http(400, message), let .forbidden(message):
+            let lower = message.lowercased()
+            return lower.contains("speed") || lower.contains("fast")
+        default:
+            return false
+        }
     }
 
     static func webSearchTool(_ model: String) -> String {
@@ -239,7 +269,7 @@ struct AnthropicClient: Sendable {
                 defaultEffort: efforts.contains("low") ? "low" : efforts.first,
                 supportsVerbosity: false,
                 priority: index,
-                supportsFast: false,
+                supportsFast: Self.supportsFast(id),
                 thinking: adaptive
             )
         }

@@ -960,7 +960,7 @@ struct ClaudeSettingsView: View {
             } header: {
                 Text("Anthropic")
             } footer: {
-                Text("Ключ создаётся на console.anthropic.com → API Keys. Удобнее всего вписать его в Config/Local.xcconfig до сборки. Ответы оплачиваются с API-баланса Anthropic, а не подпиской Claude Pro или Max. Дешевле всего Haiku, дороже Opus и Fable; поиск в интернете — около $10 за 1000 запросов.")
+                Text("Ключ создаётся на console.anthropic.com → API Keys. Удобнее всего вписать его в Config/Local.xcconfig до сборки. Ответы оплачиваются с API-баланса Anthropic, а не подпиской Claude Pro или Max. Дешевле всего Haiku, дороже Opus и Fable; поиск в интернете — около $10 за 1000 запросов. Режим Fast есть у Opus 5.5, Opus 5 и Opus 4.8: отвечает заметно быстрее, но стоит вдвое дороже.")
             }
         }
         .navigationTitle("Claude")

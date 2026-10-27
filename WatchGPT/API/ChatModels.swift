@@ -84,7 +84,7 @@ struct ModelOption: Codable, Identifiable, Hashable, Sendable {
     ]
 
     static let claudeFallback: [ModelOption] = [
-        .init(slug: "claude-opus-5-5", displayName: "Claude Opus 5.5", summary: AnthropicClient.summary("claude-opus-5-5"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 1, supportsFast: false, thinking: true),
+        .init(slug: "claude-opus-5-5", displayName: "Claude Opus 5.5", summary: AnthropicClient.summary("claude-opus-5-5"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 1, supportsFast: true, thinking: true),
         .init(slug: "claude-sonnet-5-5", displayName: "Claude Sonnet 5.5", summary: AnthropicClient.summary("claude-sonnet-5-5"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 2, supportsFast: false, thinking: true),
         .init(slug: "claude-haiku-5-5", displayName: "Claude Haiku 5.5", summary: AnthropicClient.summary("claude-haiku-5-5"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 3, supportsFast: false, thinking: true),
         .init(slug: "claude-fable-5-1", displayName: "Claude Fable 5.1", summary: AnthropicClient.summary("claude-fable-5-1"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: false, priority: 4, supportsFast: false, thinking: true),

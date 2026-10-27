@@ -1,1 +1,1 @@
-# Base build settings. Secrets must never be supplied through build settings.
+// Base build settings. Secrets must never be supplied through build settings.

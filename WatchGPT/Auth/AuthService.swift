@@ -47,6 +47,9 @@ final class AuthService {
 
     private var pairingTask: Task<Void, Never>?
     private var refreshTask: Task<AuthTokens, Error>?
+    // Results from an old session must never restore credentials after sign-out.
+    private var sessionID = UUID()
+    private var pairingID = UUID()
 
     var isSignedIn: Bool { tokens != nil }
 
@@ -106,18 +109,22 @@ final class AuthService {
 
     @discardableResult
     func obtainAPIKey() async throws -> String {
+        let requestSession = sessionID
         let current = try await validTokens()
         do {
             let key = try await OAuth.obtainAPIKey(idToken: current.idToken)
+            guard sessionID == requestSession else { throw AuthError.signedOut }
             setAPIKey(StoredAPIKey(key: key, isManual: false))
             apiKeyError = nil
             Task { await verifyAPIKey() }
             return key
         } catch OAuth.Failure.noAPIOrganization {
+            guard sessionID == requestSession else { throw AuthError.signedOut }
             apiKeyError = OAuth.Failure.noAPIOrganization.errorDescription
             DiagnosticsLog.shared.record(.voice, message: "API-ключ не выдан: нет API-организации во входе ChatGPT", detail: "organization_id")
             throw OAuth.Failure.noAPIOrganization
         } catch {
+            guard sessionID == requestSession else { throw AuthError.signedOut }
             apiKeyError = "Не удалось получить API-ключ автоматически: \(error.localizedDescription)"
             DiagnosticsLog.shared.record(.voice, error)
             throw error
@@ -177,30 +184,40 @@ final class AuthService {
 
     func startPairing() {
         pairingTask?.cancel()
+        let requestID = UUID()
+        pairingID = requestID
         phase = .requestingCode
         pairingTask = Task { [weak self] in
             do {
                 let code = try await OAuth.requestDeviceCode()
+                guard !Task.isCancelled, self?.pairingID == requestID else { return }
                 self?.phase = .waiting(code)
                 let tokens = try await OAuth.waitForApproval(code)
+                guard !Task.isCancelled, self?.pairingID == requestID else { return }
+                self?.sessionID = UUID()
+                self?.refreshTask?.cancel()
+                self?.refreshTask = nil
                 self?.store(tokens)
                 self?.phase = .signedIn
             } catch is CancellationError {
                 return
             } catch {
-                if Task.isCancelled { return }
+                guard !Task.isCancelled, self?.pairingID == requestID else { return }
                 self?.phase = .failed(error.localizedDescription)
             }
         }
     }
 
     func cancelPairing() {
+        pairingID = UUID()
         pairingTask?.cancel()
         pairingTask = nil
         if tokens == nil { phase = .signedOut }
     }
 
     func signOut() {
+        pairingID = UUID()
+        sessionID = UUID()
         pairingTask?.cancel()
         refreshTask?.cancel()
         refreshTask = nil
@@ -222,23 +239,32 @@ final class AuthService {
     /// Forces a refresh (e.g. after a 401). Concurrent callers share one request.
     @discardableResult
     func refresh() async throws -> AuthTokens {
-        if let refreshTask { return try await refreshTask.value }
+        let requestSession = sessionID
+        if let refreshTask {
+            let result = try await refreshTask.value
+            guard sessionID == requestSession else { throw AuthError.signedOut }
+            return result
+        }
         guard let current = tokens else { throw AuthError.signedOut }
 
         let task = Task<AuthTokens, Error> {
             try await OAuth.refresh(current)
         }
         refreshTask = task
-        defer { refreshTask = nil }
+        // An old completion must not clear a new session's in-flight request.
+        defer { if sessionID == requestSession { refreshTask = nil } }
 
         do {
             let updated = try await task.value
+            guard sessionID == requestSession else { throw AuthError.signedOut }
             store(updated)
             return updated
         } catch OAuth.RefreshFailure.permanent {
+            guard sessionID == requestSession else { throw AuthError.signedOut }
             signOut()
             throw AuthError.signedOut
         } catch OAuth.RefreshFailure.transient(let error) {
+            guard sessionID == requestSession else { throw AuthError.signedOut }
             throw error
         }
     }

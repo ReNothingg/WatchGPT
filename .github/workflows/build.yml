@@ -37,6 +37,29 @@ jobs:
             build | tee build.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
 
+      - name: Check bundled secrets
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import plistlib
+          import sys
+
+          roots = list(pathlib.Path("build/Build/Products").rglob("Info.plist"))
+          if not roots:
+              sys.exit("No built Info.plist files found")
+          forbidden = {"OpenAIAPIKey", "AnthropicAPIKey"}
+          for path in roots:
+              try:
+                  with path.open("rb") as f:
+                      data = plistlib.load(f)
+              except (ValueError, OSError, plistlib.InvalidFileException):
+                  continue
+              present = forbidden.intersection(data)
+              if present:
+                  sys.exit(f"Forbidden bundled API key fields in {path}: {sorted(present)}")
+          print(f"Checked {len(roots)} built Info.plist files")
+          PY
+
       - name: Upload build log
         if: failure()
         uses: actions/upload-artifact@v4

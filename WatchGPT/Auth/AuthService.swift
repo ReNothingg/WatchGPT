@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Observation
 
@@ -24,12 +23,9 @@ final class AuthService {
     struct StoredAPIKey: Codable, Equatable {
         var key: String
         var isManual: Bool
-        var fromBuild: Bool? = nil
     }
 
-    private static let bundledKeyFingerprint = "apikey.bundledFingerprint"
     private static let claudeKeyAccount = "anthropic.apikey"
-    private static let bundledClaudeFingerprint = "claudekey.bundledFingerprint"
 
     private(set) var phase: Phase
     private(set) var tokens: AuthTokens?
@@ -59,34 +55,7 @@ final class AuthService {
         tokens = stored
         phase = stored == nil ? .signedOut : .signedIn
         apiKey = Keychain.load(StoredAPIKey.self, account: Self.apiKeyAccount)
-        applyBundledAPIKey()
         claudeKey = Keychain.load(StoredAPIKey.self, account: Self.claudeKeyAccount)
-        applyBundledClaudeKey()
-    }
-
-    private func applyBundledAPIKey() {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "OpenAIAPIKey") as? String else { return }
-        let key = raw.filter { !$0.isWhitespace && $0 != "\"" }
-        guard key.hasPrefix("sk-") else { return }
-        let fingerprint = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
-        let defaults = UserDefaults.standard
-        guard defaults.string(forKey: Self.bundledKeyFingerprint) != fingerprint else { return }
-        defaults.set(fingerprint, forKey: Self.bundledKeyFingerprint)
-        setAPIKey(StoredAPIKey(key: key, isManual: true, fromBuild: true))
-        apiKeyError = nil
-        Task { await self.verifyAPIKey() }
-    }
-
-    private func applyBundledClaudeKey() {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "AnthropicAPIKey") as? String else { return }
-        let key = raw.filter { !$0.isWhitespace && $0 != "\"" }
-        guard key.hasPrefix("sk-ant-") else { return }
-        let fingerprint = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
-        let defaults = UserDefaults.standard
-        guard defaults.string(forKey: Self.bundledClaudeFingerprint) != fingerprint else { return }
-        defaults.set(fingerprint, forKey: Self.bundledClaudeFingerprint)
-        setClaudeKey(StoredAPIKey(key: key, isManual: true, fromBuild: true))
-        Task { await self.verifyClaudeKey() }
     }
 
     // MARK: Anthropic API key (Claude)

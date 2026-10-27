@@ -847,7 +847,6 @@ struct VoiceSettingsView: View {
 
     private var keyStatus: String {
         guard let key = auth.apiKey else { return "нет" }
-        if key.fromBuild == true { return "из сборки" }
         return key.isManual ? "свой" : "из аккаунта"
     }
 
@@ -960,7 +959,7 @@ struct ClaudeSettingsView: View {
             } header: {
                 Text("Anthropic")
             } footer: {
-                Text("Ключ создаётся на console.anthropic.com → API Keys. Удобнее всего вписать его в Config/Local.xcconfig до сборки. Ответы оплачиваются с API-баланса Anthropic, а не подпиской Claude Pro или Max. Дешевле всего Haiku, дороже Opus и Fable; поиск в интернете — около $10 за 1000 запросов. Режим Fast есть у Opus 5.5, Opus 5 и Opus 4.8: отвечает заметно быстрее, но стоит вдвое дороже.")
+                Text("Ключ создаётся на console.anthropic.com → API Keys. Вставьте его в поле выше, он хранится только в Keychain часов. Ответы оплачиваются с API-баланса Anthropic, а не подпиской Claude Pro или Max. Дешевле всего Haiku, дороже Opus и Fable; поиск в интернете — около $10 за 1000 запросов. Режим Fast есть у Opus 5.5, Opus 5 и Opus 4.8: отвечает заметно быстрее, но стоит вдвое дороже.")
             }
         }
         .navigationTitle("Claude")
@@ -986,7 +985,7 @@ struct ClaudeSettingsView: View {
 
     private var keyStatus: String {
         guard let key = auth.claudeKey else { return "нет" }
-        return key.fromBuild == true ? "из сборки" : "свой"
+        return key.isManual ? "свой" : "из аккаунта"
     }
 }
 

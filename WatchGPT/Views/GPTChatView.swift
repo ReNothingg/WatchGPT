@@ -63,25 +63,18 @@ struct GPTChatView: View {
         }
         .task(id: PollKey(live: conversation?.live != nil, phase: scenePhase)) {
             guard conversation?.live != nil, scenePhase != .background else { return }
-            var lastFetch = Date.now
+            var tick = 0
             while !Task.isCancelled {
-                let lowPower = PowerMonitor.shared.isLowPower
-                try? await Task.sleep(for: .seconds(lowPower ? 5 : 2))
+                let pause: Double = streamFailed ? 10 : (PowerMonitor.shared.isLowPower ? 4 : 2)
+                try? await Task.sleep(for: .seconds(pause))
                 guard !Task.isCancelled else { return }
-                let state = await store.gptHistory.streamState(chatID)
-                guard !Task.isCancelled else { return }
-                streamFailed = state == .failed
-                let every: TimeInterval
-                switch state {
-                case .streaming: every = lowPower ? 15 : 8
-                case .unknown: every = lowPower ? 8 : 4
-                case .complete: every = 0
-                case .failed: every = lowPower ? 20 : 10
+                tick += 1
+                if tick % 3 == 0 || streamFailed {
+                    let state = await store.gptHistory.streamState(chatID)
+                    guard !Task.isCancelled else { return }
+                    streamFailed = state == .failed
                 }
-                if Date.now.timeIntervalSince(lastFetch) >= every {
-                    await load(quiet: true)
-                    lastFetch = .now
-                }
+                await load(quiet: true)
             }
         }
         .handoffActivity(isActive: store.handoff, title: title) {
@@ -378,124 +371,196 @@ private struct ReasoningSummary: View {
 
     private var label: String {
         if let seconds = reasoning.seconds { return "Думал \(ReasoningFormat.duration(seconds))" }
+        let tools = reasoning.steps.filter { $0.icon != nil }
+        if !tools.isEmpty, tools.count == reasoning.steps.count {
+            var names: [String] = []
+            for step in tools {
+                let name = step.title.components(separatedBy: ":").first ?? step.title
+                if !names.contains(name) { names.append(name) }
+            }
+            return tools.count == 1 ? tools[0].title : "Использовано: " + names.prefix(2).joined(separator: ", ")
+        }
         return "Рассуждения"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                guard !reasoning.steps.isEmpty else { return }
-                WKHaptics.click()
-                withAnimation(.snappy(duration: 0.3)) { expanded.toggle() }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "brain")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                    Text(label)
-                    if !reasoning.steps.isEmpty {
-                        Text("· \(ReasoningFormat.steps(reasoning.steps.count))")
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .rotationEffect(.degrees(expanded ? 90 : 0))
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 8)
-                .frame(height: 24)
-                .glassBackground(Capsule(), interactive: true)
+            ThinkingHeader(expandable: !reasoning.steps.isEmpty, expanded: $expanded) {
+                Text(label)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.secondaryText)
             }
-            .buttonStyle(PressableStyle(scale: 0.95))
 
             if expanded {
-                ReasoningSteps(steps: reasoning.steps, focusLast: false)
-                    .transition(.opacity)
+                ReasoningSteps(steps: reasoning.steps)
+                    .transition(.opacity.combined(with: .offset(y: -4)))
             }
         }
+    }
+}
+
+private struct ThinkingHeader<Label: View>: View {
+    var expandable: Bool
+    @Binding var expanded: Bool
+    @ViewBuilder var label: () -> Label
+
+    var body: some View {
+        Button {
+            guard expandable else { return }
+            WKHaptics.click()
+            withAnimation(.snappy(duration: 0.3)) { expanded.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                label()
+                if expandable {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+            }
+            .lineLimit(1)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle(scale: 0.96))
+        .disabled(!expandable)
     }
 }
 
 private struct ReasoningSteps: View {
     let steps: [ReasoningStep]
-    var focusLast: Bool
+    var collapsedLines = 2
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 9) {
             ForEach(steps) { step in
-                let isLast = step.id == steps.last?.id
-                HStack(alignment: .top, spacing: 7) {
-                    Image(systemName: step.icon ?? "circle.fill")
-                        .font(.system(size: step.icon == nil ? 5 : 9, weight: .semibold))
-                        .foregroundStyle(focusLast && isLast ? Theme.accent : Theme.secondaryText)
-                        .frame(width: 12, height: 14)
-                    VStack(alignment: .leading, spacing: 2) {
-                        if !step.title.isEmpty {
-                            Text(step.title.replacingOccurrences(of: "**", with: ""))
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.white)
-                        }
-                        if !step.detail.isEmpty {
-                            Text(step.detail.replacingOccurrences(of: "**", with: ""))
-                                .font(.caption2)
-                                .foregroundStyle(Theme.secondaryText)
-                                .lineLimit(focusLast && !isLast ? 3 : nil)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if step.icon != nil {
+                    ToolRow(step: step)
+                } else {
+                    ThoughtRow(step: step, collapsedLines: collapsedLines)
                 }
             }
         }
-        .padding(.leading, 2)
+        .padding(.leading, 10)
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(Theme.track)
+                .frame(width: 2)
+                .padding(.vertical, 2)
+        }
     }
+}
+
+private struct ThoughtRow: View {
+    let step: ReasoningStep
+    var collapsedLines: Int
+    @State private var open = false
+
+    private var title: String { step.title.replacingOccurrences(of: "**", with: "") }
+    private var detail: String { step.detail.replacingOccurrences(of: "**", with: "") }
+    private var canOpen: Bool { detail.count > collapsedLines * 28 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if !title.isEmpty {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(ReasoningPalette.title)
+            }
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(ReasoningPalette.text)
+                    .lineLimit(open ? nil : collapsedLines)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard canOpen else { return }
+            WKHaptics.click()
+            withAnimation(.snappy(duration: 0.25)) { open.toggle() }
+        }
+    }
+}
+
+private struct ToolRow: View {
+    let step: ReasoningStep
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: step.icon ?? "wrench.and.screwdriver")
+                .font(.system(size: 9, weight: .semibold))
+                .frame(width: 12)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(step.title)
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+                if !step.detail.isEmpty {
+                    Text(step.detail.replacingOccurrences(of: "\n", with: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(ReasoningPalette.faint)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .foregroundStyle(ReasoningPalette.text)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private enum ReasoningPalette {
+    static let title = Color(white: 0.74)
+    static let text = Theme.secondaryText
+    static let faint = Color(white: 0.42)
 }
 
 private struct LiveTurnCard: View {
     let live: LiveTurn
     var failed = false
+    @State private var expanded = false
+
+    private var steps: [ReasoningStep] { live.reasoning.steps }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                if failed {
+            if failed {
+                HStack(spacing: 5) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.orange)
-                        .frame(width: 16, height: 16)
                     Text("Ответ прервался")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.white)
-                } else {
-                    PulseOrb()
-                        .frame(width: 12, height: 12)
-                        .frame(width: 16, height: 16)
-                    ShimmerText(text: live.stage, font: .footnote.weight(.medium))
-                        .lineLimit(2)
-                        .id(live.stage)
-                        .transition(.opacity.combined(with: .offset(y: 4)))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryText)
                 }
-                Spacer(minLength: 4)
-                if !failed {
+            } else {
+                ThinkingHeader(expandable: steps.count > 1, expanded: $expanded) {
+                    ShimmerText(text: live.stage, font: .footnote)
+                        .id(live.stage)
+                        .transition(.opacity)
+                    Text("·")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryText)
                     Text(timerInterval: live.startedAt...Date.distantFuture, countsDown: false)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(Theme.accent)
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(Theme.secondaryText)
                         .fixedSize()
                 }
+                .animation(.smooth(duration: 0.3), value: live.stage)
             }
-            .animation(.snappy(duration: 0.3), value: live.stage)
 
-            if !live.reasoning.steps.isEmpty {
-                ReasoningSteps(steps: live.reasoning.steps, focusLast: true)
-            } else if !failed {
-                Text("Текст и рассуждения придут целиком, как только ChatGPT закончит.")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.secondaryText)
+            if expanded {
+                ReasoningSteps(steps: steps)
+                    .transition(.opacity.combined(with: .offset(y: -4)))
+            } else if let last = steps.last {
+                ReasoningSteps(steps: [last], collapsedLines: 3)
+                    .id(last.id)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 6)), removal: .opacity))
             }
         }
-        .padding(10)
-        .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.smooth(duration: 0.35), value: steps.last?.id)
         .accessibilityElement(children: .combine)
     }
 }

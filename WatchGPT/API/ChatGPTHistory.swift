@@ -49,12 +49,22 @@ struct Reasoning: Equatable, Sendable {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty || !detail.isEmpty else { return }
-        if let last = steps.last, last.title == title, last.icon == icon, last.detail.isEmpty || detail.isEmpty || last.detail == detail {
-            if last.detail.isEmpty { steps[steps.count - 1].detail = detail }
+        if let index = steps.lastIndex(where: { $0.title == title && $0.icon == icon && Self.sameText($0.detail, detail) }) {
+            if detail.count > steps[index].detail.count { steps[index].detail = detail }
             return
         }
         steps.append(ReasoningStep(id: (steps.last?.id ?? -1) + 1, title: title, detail: detail, icon: icon))
         if steps.count > Self.maxSteps { steps.removeFirst(steps.count - Self.maxSteps) }
+    }
+
+    private static func sameText(_ a: String, _ b: String) -> Bool {
+        a.isEmpty || b.isEmpty || a.hasPrefix(b) || b.hasPrefix(a)
+    }
+
+    var services: [String] {
+        var names: [String] = []
+        for step in steps where step.icon != nil && !names.contains(step.title) { names.append(step.title) }
+        return names
     }
 
     mutating func absorb(_ other: Reasoning) {
@@ -191,7 +201,6 @@ extension ChatGPTClient {
         var reasoning: [UUID: Reasoning] = [:]
         var pending = Reasoning()
         var turnStart: Date?
-        var turnAnswer: UUID?
         var lastRaw: [String: Any]?
 
         for raw in chain.reversed() {
@@ -202,7 +211,7 @@ extension ChatGPTClient {
             let (message, pictures) = parsed
 
             let target: UUID
-            if message.role == .assistant, let last = messages.last, last.role == .assistant {
+            if message.role == .assistant, pending.isEmpty, let last = messages.last, last.role == .assistant {
                 let joined = [last.text, message.text].filter { !$0.isEmpty }.joined(separator: "\n\n")
                 messages[messages.count - 1].text = HistoryText.clip(joined)
                 messages[messages.count - 1].date = message.date
@@ -216,10 +225,8 @@ extension ChatGPTClient {
             switch message.role {
             case .user:
                 turnStart = message.date
-                turnAnswer = nil
                 pending = Reasoning()
             case .assistant:
-                turnAnswer = target
                 if !pending.isEmpty {
                     reasoning[target, default: Reasoning()].absorb(pending)
                     pending = Reasoning()
@@ -229,9 +236,7 @@ extension ChatGPTClient {
 
         var live: LiveTurn?
         if let lastRaw, let turnStart, isUnfinished(lastRaw, now: now) {
-            var current = Reasoning()
-            if let turnAnswer, let attached = reasoning.removeValue(forKey: turnAnswer) { current = attached }
-            current.absorb(pending)
+            let current = pending
             let phase = stage(of: lastRaw, reasoning: current)
             live = LiveTurn(startedAt: turnStart, stage: phase.0, icon: phase.1, reasoning: current)
         }
@@ -321,8 +326,8 @@ extension ChatGPTClient {
             }
         default:
             if role(raw) == "assistant", recipient != "all" {
-                let (title, icon) = toolStage(recipient)
-                reasoning.add(title: title, detail: toolDetail(content), icon: icon)
+                let call = toolCall(recipient: recipient, content: content)
+                reasoning.add(title: call.title, detail: call.detail, icon: call.icon)
             }
         }
 
@@ -360,67 +365,139 @@ extension ChatGPTClient {
         switch role(raw) {
         case "user":
             let parts = (raw["content"] as? [String: Any])?["parts"] as? [Any] ?? []
-            return imageParts(parts).isEmpty ? ("Думает", "brain") : ("Смотрит на изображение", "eye")
+            return imageParts(parts).isEmpty ? ("Думаю", "brain") : ("Смотрю на изображение", "eye")
         case "tool":
             let name = (raw["author"] as? [String: Any])?["name"] as? String ?? ""
             let (title, icon) = toolStage(name)
-            return name.isEmpty ? ("Изучает результаты", "doc.text.magnifyingglass") : (title, icon)
+            return name.isEmpty ? ("Изучаю результаты", "doc.text.magnifyingglass") : (title, icon)
         default:
             break
         }
-        if recipient != "all" { return toolStage(recipient) }
+        if recipient != "all" {
+            let call = toolCall(recipient: recipient, content: raw["content"] as? [String: Any] ?? [:])
+            return (call.title, call.icon)
+        }
         switch contentType(raw) {
         case "thoughts":
-            let summary = reasoning.steps.last { $0.icon == nil }?.title ?? ""
-            return (summary.isEmpty ? "Думает" : summary, "brain")
+            return ("Думаю", "brain")
         case "text", "multimodal_text", "reasoning_recap":
-            return ("Пишет ответ", "pencil")
+            return ("Пишу ответ", "pencil")
         default:
-            return ("Думает", "brain")
+            return ("Думаю", "brain")
         }
     }
 
     static func toolStage(_ name: String) -> (String, String) {
         let n = name.lowercased()
         if n.hasPrefix("web") || n.contains("browser") || n.contains("search") {
-            return ("Ищет в интернете", "globe")
+            return ("Ищу в интернете", "globe")
         }
         if n.contains("dalle") || n.contains("image") || n.contains("t2uay3k") {
-            return ("Рисует изображение", "paintbrush")
+            return ("Рисую изображение", "paintbrush")
         }
         if n.contains("python") || n.contains("code") || n.contains("container") {
-            return ("Запускает код", "terminal")
+            return ("Запускаю код", "terminal")
         }
         if n.contains("file") || n.contains("doc") {
-            return ("Читает файлы", "doc.text")
+            return ("Читаю файлы", "doc.text")
         }
         if n.hasPrefix("bio") || n.contains("memory") {
-            return ("Обновляет память", "brain.head.profile")
+            return ("Обновляю память", "brain.head.profile")
         }
         if n.contains("canmore") || n.contains("canvas") {
-            return ("Пишет в холсте", "doc.richtext")
+            return ("Пишу в холсте", "doc.richtext")
         }
         if n.contains("research") {
-            return ("Исследует", "magnifyingglass")
+            return ("Исследую", "magnifyingglass")
         }
-        return ("Использует инструменты", "wrench.and.screwdriver")
+        return ("Использую инструменты", "wrench.and.screwdriver")
     }
 
-    private static func toolDetail(_ content: [String: Any]) -> String {
+    private static func toolCall(recipient: String, content: [String: Any]) -> (title: String, detail: String, icon: String) {
         let text = (content["text"] as? String) ?? ((content["parts"] as? [Any])?.compactMap { $0 as? String }.joined(separator: "\n")) ?? ""
-        guard !text.isEmpty else { return "" }
-        if let data = text.data(using: .utf8), let json = try? JSONSerialization.jsonObject(with: data) {
-            var found: [String] = []
-            collectQueries(json, into: &found)
-            return found.prefix(3).map { "«\($0)»" }.joined(separator: "\n")
+        let json = text.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) }
+
+        var server = ""
+        var tool = ""
+        var payload: Any? = json
+        if recipient.hasPrefix("api_tool"), let dict = json as? [String: Any] {
+            let path = (dict["path"] as? String ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let pieces = path.split(separator: "/", maxSplits: 1).map(String.init)
+            server = pieces.first ?? ""
+            tool = pieces.count > 1 ? pieces[1] : ""
+            payload = dict["args"] ?? dict
+        } else if let dot = recipient.firstIndex(of: "."), !isBuiltIn(recipient) {
+            server = String(recipient[..<dot])
+            tool = String(recipient[recipient.index(after: dot)...])
         }
-        return ""
+
+        var found: [String] = []
+        if let payload { collectQueries(payload, into: &found) }
+        let detail = found.prefix(2).joined(separator: "\n")
+
+        guard !server.isEmpty else {
+            let (title, icon) = toolStage(recipient)
+            return (title, found.prefix(3).map { "«\($0)»" }.joined(separator: "\n"), icon)
+        }
+        let name = serviceName(server)
+        let action = toolAction(tool)
+        return (action.isEmpty ? name : "\(name): \(action)", detail, serviceIcon(name))
+    }
+
+    private static func isBuiltIn(_ recipient: String) -> Bool {
+        let n = recipient.lowercased()
+        return ["web", "browser", "python", "dalle", "bio", "canmore", "file_search", "myfiles_browser", "container", "image_gen", "research_kickoff_tool"]
+            .contains { n.hasPrefix($0) }
+    }
+
+    private static func serviceName(_ raw: String) -> String {
+        var key = raw.lowercased()
+        for prefix in ["connector_openai_", "connector_", "mcp_", "openai_"] where key.hasPrefix(prefix) {
+            key = String(key.dropFirst(prefix.count))
+        }
+        let known: [String: String] = [
+            "github": "GitHub", "gmail": "Gmail", "google_drive": "Google Drive", "gdrive": "Google Drive",
+            "google_calendar": "Google Calendar", "gcal": "Google Calendar", "notion": "Notion", "slack": "Slack",
+            "linear": "Linear", "jira": "Jira", "confluence": "Confluence", "dropbox": "Dropbox", "box": "Box",
+            "sharepoint": "SharePoint", "outlook": "Outlook", "teams": "Teams", "hubspot": "HubSpot",
+            "figma": "Figma", "canva": "Canva", "asana": "Asana", "zapier": "Zapier", "stripe": "Stripe",
+            "automations": "Задачи",
+        ]
+        if let name = known[key] { return name }
+        if key.count > 20, key.allSatisfy({ $0.isHexDigit }) { return "Интеграция" }
+        let words = key.split(whereSeparator: { $0 == "_" || $0 == "-" }).map { $0.prefix(1).uppercased() + $0.dropFirst() }
+        return words.isEmpty ? raw : words.joined(separator: " ")
+    }
+
+    private static func serviceIcon(_ name: String) -> String {
+        switch name {
+        case "GitHub": return "chevron.left.forwardslash.chevron.right"
+        case "Gmail", "Outlook": return "envelope"
+        case "Google Calendar": return "calendar"
+        case "Google Drive", "Dropbox", "Box", "SharePoint": return "folder"
+        case "Slack", "Teams": return "bubble.left.and.bubble.right"
+        case "Задачи": return "clock"
+        default: return "puzzlepiece.extension"
+        }
+    }
+
+    private static func toolAction(_ tool: String) -> String {
+        let t = tool.lowercased()
+        guard !t.isEmpty else { return "" }
+        if t.contains("search") || t.contains("find") || t.contains("query") { return "поиск" }
+        if t.contains("fetch") || t.contains("get") || t.contains("read") || t.contains("open") || t.contains("download") { return "читаю" }
+        if t.contains("list") { return "список" }
+        if t.contains("create") || t.contains("add") || t.contains("write") || t.contains("send") || t.contains("post") { return "создаю" }
+        if t.contains("update") || t.contains("edit") || t.contains("patch") { return "изменяю" }
+        if t.contains("delete") || t.contains("remove") { return "удаляю" }
+        if t.contains("run") || t.contains("exec") || t.contains("command") { return "выполняю команду" }
+        return tool.replacingOccurrences(of: "_", with: " ")
     }
 
     private static func collectQueries(_ any: Any, into found: inout [String]) {
         guard found.count < 3 else { return }
         if let dict = any as? [String: Any] {
-            for key in ["q", "query", "prompt", "search_query", "queries"] {
+            for key in ["q", "query", "prompt", "search_query", "queries", "title", "repository_full_name", "repo", "file_path", "path", "url", "cmd", "command", "name"] {
                 if let value = dict[key] as? String {
                     let flat = HistoryText.plain(value, limit: 120)
                     if !flat.isEmpty, !found.contains(flat) { found.append(flat) }

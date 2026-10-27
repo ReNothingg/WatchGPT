@@ -173,13 +173,21 @@ private struct ToggleTile: View {
     @ViewBuilder
     private var glassButton: some View {
         if isOn {
-            Button(action: toggle) { label(glass: true) }
+            Button(action: toggle) { glassLabel }
                 .buttonStyle(.glassProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 18))
                 .tint(onColor)
         } else {
-            Button(action: toggle) { label(glass: true) }
+            Button(action: toggle) { glassLabel }
                 .buttonStyle(.glass)
+                .buttonBorderShape(.roundedRectangle(radius: 18))
         }
+    }
+
+    private var glassLabel: some View {
+        label(glass: true)
+            .padding(.horizontal, 2)
+            .padding(.vertical, 4)
     }
 
     private var button: some View {

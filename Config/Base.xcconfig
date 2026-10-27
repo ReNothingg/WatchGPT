@@ -1,3 +1,1 @@
-OPENAI_API_KEY =
-ANTHROPIC_API_KEY =
-#include? "Local.xcconfig"
+// Base build settings. Secrets must never be supplied through build settings.

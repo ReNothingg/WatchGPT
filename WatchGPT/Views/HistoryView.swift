@@ -1,14 +1,14 @@
 import SwiftUI
 
 enum HistorySource: String, CaseIterable, Identifiable {
-    case gpt, watch
+    case watch, gpt
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .gpt: return "ChatGPT"
-        case .watch: return "Часы"
+        case .watch: return "На часах"
         }
     }
 
@@ -83,58 +83,44 @@ private struct HistorySourcePicker: View {
     @Namespace private var selection
 
     var body: some View {
-        if #available(watchOS 26.0, *) {
-            segments
-                .padding(3)
-                .glassEffect(.regular, in: Capsule())
-        } else {
-            segments
-                .padding(3)
-                .background(Capsule().fill(Theme.surface))
-                .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
-        }
-    }
-
-    private var segments: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ForEach(HistorySource.allCases) { item in
                 let selected = item == source
                 Button {
                     WKHaptics.click()
                     if !selected {
-                        withAnimation(.bouncy(duration: 0.4, extraBounce: 0.12)) { source = item }
+                        withAnimation(.easeOut(duration: 0.25)) { source = item }
                     }
                     onTap(item)
                 } label: {
                     HStack(spacing: 4) {
                         if item == .gpt && loading {
                             SpinningIcon()
-                        } else {
-                            Image(systemName: item.icon)
-                                .font(.system(size: 10, weight: .semibold))
                         }
                         Text(item.title)
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .font(.caption.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
                     .foregroundStyle(selected ? Color.white : Theme.secondaryText)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 30)
+                    .frame(height: 28)
                     .background {
                         if selected {
                             Capsule()
-                                .fill(Theme.accent)
+                                .fill(Theme.track)
                                 .matchedGeometryEffect(id: "selection", in: selection)
                         }
                     }
                     .contentShape(Capsule())
                 }
-                .buttonStyle(PressableStyle(scale: 0.95))
+                .buttonStyle(.plain)
                 .accessibilityLabel(item == .gpt ? "История ChatGPT" : "История на часах")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
+        .padding(2)
+        .background(Capsule().fill(Theme.surface))
     }
 }
 
@@ -376,12 +362,11 @@ private struct Entrance: ViewModifier {
     let appeared: Bool
 
     func body(content: Content) -> some View {
-        let delay = Double(min(index, 8)) * 0.045
+        let delay = Double(min(index, 8)) * 0.03
         content
             .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 18)
-            .scaleEffect(appeared ? 1 : 0.94)
-            .animation(.spring(duration: 0.5, bounce: 0.28).delay(delay), value: appeared)
+            .offset(y: appeared ? 0 : 6)
+            .animation(.easeOut(duration: 0.3).delay(delay), value: appeared)
     }
 }
 
@@ -392,9 +377,8 @@ private struct LatestChatCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    LiveDot(active: isOpen)
                     Text(isOpen ? "Открыт сейчас" : "Последний")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.accent)
@@ -405,23 +389,21 @@ private struct LatestChatCard: View {
                 }
 
                 Text(chat.title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.white)
-                    .lineLimit(3)
+                    .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 if !chat.preview.isEmpty {
                     Text(chat.preview)
                         .font(.caption)
                         .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(3)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
 
                 HStack(spacing: 4) {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                        .font(.system(size: 9, weight: .semibold))
-                    Text("\(chat.messageCount)")
+                    Text(ChatDate.messages(chat.messageCount))
                         .monospacedDigit()
                     if chat.isFromGPT {
                         GPTBadge()
@@ -435,75 +417,18 @@ private struct LatestChatCard: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(Theme.accent)
                         .lineLimit(1)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.accent)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(ChatDate.messages(chat.messageCount))
                 .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)
                 .padding(.top, 2)
             }
-            .padding(12)
+            .padding(11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CardBackground())
-            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(PressableStyle())
-        .padding(.bottom, 6)
-    }
-}
-
-private struct CardBackground: View {
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-        LiveTimeline(role: .decorative, fps: 20, idleAfter: .seconds(8)) { date in
-            let t = date.timeIntervalSinceReferenceDate
-            let x = 0.5 + 0.5 * cos(t * 0.5)
-            let y = 0.5 * sin(t * 0.4)
-            Color.clear
-                .glassBackground(shape)
-                .overlay(
-                    RadialGradient(
-                        colors: [Theme.accent.opacity(0.38), Theme.accent.opacity(0.0)],
-                        center: UnitPoint(x: x, y: y),
-                        startRadius: 0,
-                        endRadius: 150
-                    )
-                    .clipShape(shape)
-                )
-                .overlay(
-                    shape.strokeBorder(
-                        AngularGradient(
-                            colors: [Theme.accent.opacity(0.9), Theme.accent.opacity(0.1), Theme.accent.opacity(0.6), Theme.accent.opacity(0.1), Theme.accent.opacity(0.9)],
-                            center: .center,
-                            angle: .radians(t * 0.8)
-                        ),
-                        lineWidth: 1.2
-                    )
-                )
-        }
-    }
-}
-
-private struct LiveDot: View {
-    let active: Bool
-
-    var body: some View {
-        LiveTimeline(role: .status, fps: 20, isActive: active) { date in
-            let p = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
-            ZStack {
-                if active {
-                    Circle()
-                        .stroke(Theme.accent.opacity(0.7 * (1 - p)), lineWidth: 1)
-                        .scaleEffect(1 + p * 1.4)
-                }
-                Circle().fill(Theme.accent)
-            }
-            .frame(width: 6, height: 6)
-        }
-        .frame(width: 10, height: 10)
+        .buttonStyle(PressableStyle(scale: 0.97))
+        .padding(.bottom, 4)
     }
 }
 
@@ -552,16 +477,13 @@ private struct EmptyHistory: View {
     let icon: String
     let title: String
     let subtitle: String
-    @State private var pulse = false
-
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 30, weight: .medium))
-                .foregroundStyle(Theme.accent)
-                .symbolEffect(.bounce, value: pulse)
+                .font(.system(size: 24, weight: .regular))
+                .foregroundStyle(Theme.secondaryText)
             Text(title)
-                .font(.headline)
+                .font(.footnote.weight(.semibold))
             Text(subtitle)
                 .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)
@@ -570,7 +492,6 @@ private struct EmptyHistory: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
-        .onAppear { pulse.toggle() }
     }
 }
 

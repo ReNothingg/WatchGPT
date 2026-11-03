@@ -800,8 +800,8 @@ struct VoiceSettingsView: View {
                     }
                     .font(.footnote)
 
-                    if let key = auth.apiKey?.key {
-                        Text("\(key.prefix(8))…\(key.suffix(4)) · \(key.count) симв.")
+                    if auth.apiKey != nil {
+                        Text("Ключ сохранён в Keychain")
                             .font(.caption2)
                             .foregroundStyle(Theme.secondaryText)
                         KeyCheckRow(check: auth.keyCheck) { await auth.verifyAPIKey() }
@@ -818,14 +818,12 @@ struct VoiceSettingsView: View {
                     }
                     .disabled(fetchingKey)
 
-                    TextField("Вставить ключ sk-…", text: $keyDraft)
+                    SecureField("Ввести ключ sk-…", text: $keyDraft)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onChange(of: keyDraft) { _, value in
-                            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                            auth.setManualAPIKey(value)
-                            keyDraft = ""
-                        }
+                        .onSubmit { saveOpenAIKey() }
+                    Button("Сохранить ключ") { saveOpenAIKey() }
+                        .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     if auth.apiKey != nil {
                         Button(role: .destructive) {
@@ -843,6 +841,11 @@ struct VoiceSettingsView: View {
         }
         .navigationTitle("Голос")
         .onDisappear { store.playback.stop() }
+    }
+
+    private func saveOpenAIKey() {
+        auth.setManualAPIKey(keyDraft)
+        keyDraft = ""
     }
 
     private var keyStatus: String {
@@ -933,21 +936,19 @@ struct ClaudeSettingsView: View {
                 }
                 .font(.footnote)
 
-                if let key = auth.claudeKey?.key {
-                    Text("\(key.prefix(10))…\(key.suffix(4)) · \(key.count) симв.")
+                if auth.claudeKey != nil {
+                    Text("Ключ сохранён в Keychain")
                         .font(.caption2)
                         .foregroundStyle(Theme.secondaryText)
                     KeyCheckRow(check: auth.claudeKeyCheck) { await auth.verifyClaudeKey() }
                 }
 
-                TextField("Вставить ключ sk-ant-…", text: $keyDraft)
+                SecureField("Ввести ключ sk-ant-…", text: $keyDraft)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .onChange(of: keyDraft) { _, value in
-                        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                        auth.setManualClaudeKey(value)
-                        keyDraft = ""
-                    }
+                    .onSubmit { saveClaudeKey() }
+                Button("Сохранить ключ") { saveClaudeKey() }
+                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 if auth.hasClaudeKey {
                     Button(role: .destructive) {
@@ -981,6 +982,11 @@ struct ClaudeSettingsView: View {
                 WKHaptics.click()
             }
         )
+    }
+
+    private func saveClaudeKey() {
+        auth.setManualClaudeKey(keyDraft)
+        keyDraft = ""
     }
 
     private var keyStatus: String {

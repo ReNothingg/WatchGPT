@@ -45,6 +45,8 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     var fromGPT: Bool?
     var refine: Refinement?
     var claude: Bool?
+    var versions: [[ChatMessage]]?
+    var versionIndex: Int?
 
     var modelText: String { refine?.prompt ?? text }
 }

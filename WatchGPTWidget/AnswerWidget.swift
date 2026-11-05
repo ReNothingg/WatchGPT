@@ -5,11 +5,13 @@ struct AnswerEntry: TimelineEntry {
     let date: Date
     let answer: WidgetAnswer?
     let signedIn: Bool
+    var pending: WidgetPending?
     var relevance: TimelineEntryRelevance?
 }
 
 struct AnswerProvider: TimelineProvider {
     private static let freshFor: TimeInterval = 15 * 60
+    private static let pendingFor: TimeInterval = 10 * 60
 
     func placeholder(in context: Context) -> AnswerEntry {
         AnswerEntry(date: .now, answer: .preview, signedIn: true)
@@ -28,13 +30,23 @@ struct AnswerProvider: TimelineProvider {
         let snap = SharedStore.load()
         let now = Date.now
         var entries: [AnswerEntry] = []
-        if let answer = snap.lastAnswer, answer.date.addingTimeInterval(Self.freshFor) > now {
+        if let pending = snap.pending, pending.startedAt.addingTimeInterval(Self.pendingFor) > now {
+            let staleAt = pending.startedAt.addingTimeInterval(Self.pendingFor)
+            entries.append(AnswerEntry(
+                date: now,
+                answer: snap.lastAnswer,
+                signedIn: snap.signedIn,
+                pending: pending,
+                relevance: TimelineEntryRelevance(score: 100, duration: staleAt.timeIntervalSince(now))
+            ))
+            entries.append(AnswerEntry(date: staleAt, answer: snap.lastAnswer, signedIn: snap.signedIn, relevance: TimelineEntryRelevance(score: 1)))
+        } else if let answer = snap.lastAnswer, answer.date.addingTimeInterval(Self.freshFor) > now {
             let staleAt = answer.date.addingTimeInterval(Self.freshFor)
             entries.append(AnswerEntry(
                 date: now,
                 answer: answer,
                 signedIn: snap.signedIn,
-                relevance: TimelineEntryRelevance(score: 50, duration: staleAt.timeIntervalSince(now))
+                relevance: TimelineEntryRelevance(score: 80, duration: staleAt.timeIntervalSince(now))
             ))
             entries.append(AnswerEntry(date: staleAt, answer: answer, signedIn: snap.signedIn, relevance: TimelineEntryRelevance(score: 1)))
         } else {
@@ -48,12 +60,17 @@ struct AnswerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: SharedStore.answerWidgetKind, provider: AnswerProvider()) { entry in
             AnswerWidgetView(entry: entry)
-                .widgetURL(entry.answer.map { SharedStore.deepLink(chatID: $0.chatID) } ?? SharedStore.deepLinkAsk)
+                .widgetURL(link(entry))
         }
-        .configurationDisplayName("Последний ответ")
-        .description("Последний ответ ChatGPT на циферблате. Нажмите, чтобы открыть чат.")
+        .configurationDisplayName("Ответ")
+        .description("Показывает, что ответ готовится, а затем сам ответ. Поднимается в Smart Stack, пока ответ свежий.")
         .supportedFamilies([.accessoryRectangular, .accessoryInline])
     }
+}
+
+func link(_ entry: AnswerEntry) -> URL {
+    if let pending = entry.pending, !pending.chatID.isEmpty { return SharedStore.deepLink(chatID: pending.chatID) }
+    return entry.answer.map { SharedStore.deepLink(chatID: $0.chatID) } ?? SharedStore.deepLinkAsk
 }
 
 struct AnswerWidgetView: View {
@@ -71,9 +88,36 @@ struct AnswerWidgetView: View {
         entry.signedIn ? entry.answer : nil
     }
 
+    private var pending: WidgetPending? {
+        entry.signedIn ? entry.pending : nil
+    }
+
     private var rectangular: some View {
         Group {
-            if let answer = shown {
+            if let pending {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 3) {
+                        Image(systemName: pending.preview == nil ? "ellipsis.bubble.fill" : "text.bubble.fill")
+                            .font(.system(size: 10, weight: .bold))
+                        Text(pending.preview == nil ? "Готовлю ответ" : "Пишу ответ")
+                        Spacer(minLength: 2)
+                        Text(pending.startedAt, style: .timer)
+                            .monospacedDigit()
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 40, alignment: .trailing)
+                    }
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(RingPalette.mint)
+                    .widgetAccentable()
+
+                    Text(pending.preview ?? pending.question)
+                        .font(.system(size: 14))
+                        .foregroundStyle(pending.preview == nil ? .secondary : .primary)
+                        .lineLimit(pending.preview == nil ? 2 : 3)
+                        .privacySensitive()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let answer = shown {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 3) {
                         Image(systemName: "sparkles")
@@ -116,7 +160,14 @@ struct AnswerWidgetView: View {
 
     private var inline: some View {
         Group {
-            if let answer = shown {
+            if let pending {
+                Label {
+                    Text(pending.preview == nil ? "Готовлю ответ…" : pending.preview ?? "")
+                        .privacySensitive()
+                } icon: {
+                    Image(systemName: "ellipsis.bubble.fill")
+                }
+            } else if let answer = shown {
                 Label {
                     Text(answer.answer).privacySensitive()
                 } icon: {
@@ -137,127 +188,4 @@ extension WidgetAnswer {
         date: .now,
         chatID: ""
     )
-}
-
-struct LimitsWidget: Widget {
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: SharedStore.limitsWidgetKind, provider: AskProvider()) { entry in
-            LimitsWidgetView(entry: entry)
-                .widgetURL(SharedStore.deepLinkUsage)
-        }
-        .configurationDisplayName("Лимиты ChatGPT")
-        .description("Сколько осталось в 5-часовом и недельном окне и когда сброс.")
-        .supportedFamilies([.accessoryRectangular, .accessoryCircular, .accessoryCorner])
-    }
-}
-
-struct LimitsWidgetView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: AskEntry
-
-    private var windows: [UsageWindow] {
-        [entry.snapshot.usage?.primary, entry.snapshot.usage?.secondary].compactMap { $0 }
-    }
-
-    var body: some View {
-        switch family {
-        case .accessoryCircular: circular
-        case .accessoryCorner: corner
-        default: rectangular
-        }
-    }
-
-    private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 4) {
-                Text("Лимиты")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(RingPalette.mint)
-                    .widgetAccentable()
-                Spacer(minLength: 4)
-                if let reset = entry.window?.resetAt, reset > entry.date {
-                    Label(resetText(reset), systemImage: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            if windows.isEmpty {
-                Text(entry.snapshot.signedIn ? "Откройте приложение, чтобы загрузить лимиты" : "Войдите в приложении")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            } else {
-                ForEach(Array(windows.prefix(2).enumerated()), id: \.offset) { index, window in
-                    let left = window.remainingPercent(at: entry.date)
-                    HStack(spacing: 6) {
-                        Text(window.shortLabel)
-                            .frame(width: 30, alignment: .leading)
-                        Gauge(value: left, in: 0...100) {
-                            EmptyView()
-                        }
-                        .gaugeStyle(.accessoryLinearCapacity)
-                        .tint(RingPalette.color(index, left))
-                        Text(Theme.percent(left))
-                            .monospacedDigit()
-                            .frame(width: 42, alignment: .trailing)
-                    }
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                }
-            }
-        }
-        .containerBackground(.ultraThinMaterial, for: .widget)
-    }
-
-    private var circular: some View {
-        Group {
-            if let window = entry.window {
-                let left = window.remainingPercent(at: entry.date)
-                Gauge(value: left, in: 0...100) {
-                    Text(window.shortLabel)
-                } currentValueLabel: {
-                    Text("\(Int(left.rounded()))")
-                        .monospacedDigit()
-                }
-                .gaugeStyle(.accessoryCircular)
-                .tint(Theme.usageColor(left))
-            } else {
-                ZStack {
-                    AccessoryWidgetBackground()
-                    Image(systemName: "gauge.with.dots.needle.33percent")
-                        .font(.system(size: 20, weight: .semibold))
-                }
-            }
-        }
-        .widgetAccentable()
-        .containerBackground(for: .widget) { Color.clear }
-    }
-
-    private var corner: some View {
-        Text(entry.remaining.map { Theme.percent($0) } ?? "–")
-            .font(.system(size: 18, weight: .semibold, design: .rounded))
-            .monospacedDigit()
-            .widgetCurvesContent()
-            .widgetAccentable()
-            .widgetLabel {
-                if let window = entry.window, let left = entry.remaining {
-                    Gauge(value: left, in: 0...100) {
-                        Text(window.shortLabel)
-                    }
-                    .tint(Theme.usageColor(left))
-                } else {
-                    Text("Лимиты")
-                }
-            }
-            .containerBackground(for: .widget) { Color.clear }
-    }
-
-    private func resetText(_ date: Date) -> String {
-        if Calendar.current.isDate(date, inSameDayAs: entry.date) {
-            return date.formatted(date: .omitted, time: .shortened)
-        }
-        return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
-    }
 }

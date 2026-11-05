@@ -27,6 +27,14 @@ enum Handoff {
         return url(prompt: prompt)
     }
 
+    static func url(code: String, language: String, claude: Bool) -> URL? {
+        let fence = "```"
+        let header = "Код из ответа на Apple Watch:"
+        let body = clip(code, promptBudget - header.utf8.count - language.utf8.count - 16)
+        let prompt = "\(header)\n\n\(fence)\(language)\n\(body)\n\(fence)"
+        return url(prompt: prompt, base: claude ? claudeBase : base)
+    }
+
     static func url(prompt: String, base: URL = base) -> URL? {
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
         components.queryItems = [URLQueryItem(name: "q", value: prompt)]

@@ -86,6 +86,14 @@ struct WidgetSnapshot: Codable, Equatable, Sendable {
     var signedIn: Bool = false
     var usage: UsageSnapshot?
     var lastAnswer: WidgetAnswer?
+    var pending: WidgetPending?
+}
+
+struct WidgetPending: Codable, Equatable, Sendable {
+    var question: String
+    var preview: String?
+    var startedAt: Date
+    var chatID: String
 }
 
 struct WidgetAnswer: Codable, Equatable, Sendable {

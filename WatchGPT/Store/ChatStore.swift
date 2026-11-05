@@ -68,6 +68,7 @@ final class ChatStore {
         }
     }
     private(set) var voicePrompt: QuickPrompt?
+    private(set) var editingMessageID: UUID?
     let usageHistory = UsageHistory()
 
     static let answerFontRange: ClosedRange<Double> = 0.7...1.5
@@ -295,6 +296,7 @@ final class ChatStore {
         if recorder.isActive { recorder.cancel() }
         pendingRecording = nil
         voicePrompt = nil
+        editingMessageID = nil
         voicePhase = .idle
     }
 
@@ -308,8 +310,39 @@ final class ChatStore {
 
     func sendFromFallback(_ text: String) {
         let message = withVoicePrompt(text)
+        let editID = editingMessageID
         cancelVoice()
-        send(message)
+        deliver(message, editing: editID)
+    }
+
+    private func deliver(_ text: String, editing id: UUID?) {
+        if let id {
+            edit(id, to: text)
+        } else {
+            send(text)
+        }
+    }
+
+    func editByVoice(_ id: UUID) {
+        guard !isBusy, voicePhase == .idle else { return }
+        WKHaptics.click()
+        speaker.stop()
+        playback.stop()
+        if usesCloudVoice {
+            startVoice()
+            if voicePhase == .recording { editingMessageID = id }
+        } else {
+            Dictation.present { [weak self] text in self?.edit(id, to: text) }
+        }
+    }
+
+    func edit(_ id: UUID, to raw: String) {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isBusy,
+              let index = messages.firstIndex(where: { $0.id == id && $0.role == .user }) else { return }
+        didAutoResume = false
+        messages.removeSubrange(index...)
+        submit(text)
     }
 
     func runQuickPrompt(_ prompt: QuickPrompt) {
@@ -384,8 +417,10 @@ final class ChatStore {
                 self.pendingRecording = nil
                 self.voiceFailures = 0
                 let message = self.withVoicePrompt(result.text)
+                let editID = self.editingMessageID
+                self.editingMessageID = nil
                 self.voicePhase = .idle
-                self.send(message)
+                self.deliver(message, editing: editID)
             } catch {
                 guard !Task.isCancelled else { return }
                 DiagnosticsLog.shared.record(.voice, error)
@@ -815,12 +850,14 @@ final class ChatStore {
         let style = conciseAnswers
             ? "Be brief: lead with the answer, then at most 2–4 short sentences or a compact list. Expand only if the user explicitly asks for detail."
             : "Be clear and well structured, but keep in mind the screen is small; avoid filler."
+        let tables = "Use a table only when it genuinely helps, with at most 3 narrow columns and short cells."
         return """
         You are \(assistant) running on the user's Apple Watch. The user speaks to you through dictation, \
         so their message may contain speech-recognition mistakes — infer what they meant. \
         Always reply in the language of the user's message. \(style) \
-        Write plain text that is easy to read on a tiny screen and to read aloud: no tables, no headings, \
-        no code blocks unless essential; simple **bold** and short bullet lists are fine. \
+        Write plain text that is easy to read on a tiny screen and to read aloud: no headings; \
+        simple **bold** and short bullet lists are fine. \(tables) \
+        Use code blocks only when essential, fenced with ``` and a language tag. \
         Math: write formulas in LaTeX. Short inline math goes in \\( … \\); every important formula goes \
         on its own line in \\[ … \\]. The screen is about 180 points wide, so keep each displayed formula short: \
         split long derivations into several \\[ … \\] lines, avoid wide matrices, never put formulas in code blocks. \

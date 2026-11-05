@@ -237,13 +237,20 @@ private struct MessageRow: View, Equatable {
     private var content: some View {
         switch message.role {
         case .user:
-            HStack {
-                Spacer(minLength: 28)
-                MarkdownText(text: message.text, style: .footnote)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous), fill: Theme.bubble)
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack {
+                    Spacer(minLength: 28)
+                    MarkdownText(text: message.text, style: .footnote)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .glassBackground(RoundedRectangle(cornerRadius: 14, style: .continuous), fill: Theme.bubble)
+                }
+                if !store.isBusy {
+                    EditMessageBar(message: message)
+                        .transition(.opacity)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         case .assistant:
             if message.isError {
                 VStack(alignment: .leading, spacing: 8) {
@@ -293,6 +300,7 @@ private struct MessageRow: View, Equatable {
                 VStack(alignment: .leading, spacing: 4) {
                     MarkdownText(text: message.text, scale: fontScale, live: isLast && store.status == .streaming)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .environment(\.tableLongPress, rewriteWithoutTables)
                         .onTapGesture(count: 2) { store.speaker.toggle(message.text) }
                     if isLast && store.status == .streaming {
                         if isLuminanceReduced {
@@ -315,6 +323,82 @@ private struct MessageRow: View, Equatable {
                 .animation(.easeOut(duration: 0.25), value: isLast && store.canRefine)
             }
         }
+    }
+}
+
+private extension MessageRow {
+    func rewriteWithoutTables() {
+        guard !store.isBusy else { return }
+        WKHaptics.click()
+        store.send("Перепиши без таблиц")
+    }
+}
+
+private struct EditMessageBar: View {
+    @Environment(ChatStore.self) private var store
+    let message: ChatMessage
+    @State private var editing = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            button(icon: "mic.fill", label: "Изменить голосом") {
+                store.editByVoice(message.id)
+            }
+            button(icon: "keyboard", label: "Изменить текстом") {
+                WKHaptics.click()
+                editing = true
+            }
+        }
+        .sheet(isPresented: $editing) {
+            EditMessageSheet(message: message)
+        }
+    }
+
+    private func button(icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .frame(width: 28, height: 28)
+                .glassBackground(Circle(), interactive: true)
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableStyle(scale: 0.9))
+        .accessibilityLabel(label)
+    }
+}
+
+private struct EditMessageSheet: View {
+    @Environment(ChatStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let message: ChatMessage
+    @State private var draft = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                TextField("Сообщение", text: $draft, axis: .vertical)
+                    .onSubmit(send)
+                Button(action: send) {
+                    Label("Отправить", systemImage: "arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .tint(Theme.accent)
+                .foregroundStyle(Theme.onAccent)
+                .buttonStyle(.borderedProminent)
+                .disabled(trimmed.isEmpty || trimmed == message.text)
+            }
+        }
+        .navigationTitle("Изменить")
+        .onAppear { draft = message.text }
+    }
+
+    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func send() {
+        guard !trimmed.isEmpty, trimmed != message.text else { return }
+        dismiss()
+        store.edit(message.id, to: trimmed)
     }
 }
 

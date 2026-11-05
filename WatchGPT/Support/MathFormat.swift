@@ -98,16 +98,37 @@ enum MathFormat {
 
     private static let inlineCache: NSCache<NSString, InlineBox> = {
         let cache = NSCache<NSString, InlineBox>()
-        cache.countLimit = 120
+        cache.countLimit = 300
+        cache.totalCostLimit = 400_000
         return cache
     }()
 
-    static func inline(_ text: String, size: CGFloat) -> AttributedString {
+    static func inline(_ text: String, size: CGFloat, cached: Bool = true) -> AttributedString {
+        guard cached else { return renderInline(text, size: size) }
         let key = "\(size)|\(text)" as NSString
         if let hit = inlineCache.object(forKey: key) { return hit.value }
         let value = renderInline(text, size: size)
-        inlineCache.setObject(InlineBox(value), forKey: key)
+        inlineCache.setObject(InlineBox(value), forKey: key, cost: text.utf8.count)
         return value
+    }
+
+    private final class NodeBox {
+        let value: MathNode
+        init(_ value: MathNode) { self.value = value }
+    }
+
+    private static let nodeCache: NSCache<NSString, NodeBox> = {
+        let cache = NSCache<NSString, NodeBox>()
+        cache.countLimit = 200
+        return cache
+    }()
+
+    static func parsed(_ latex: String) -> MathNode {
+        let key = latex as NSString
+        if let hit = nodeCache.object(forKey: key) { return hit.value }
+        let node = MathParser.parse(latex)
+        nodeCache.setObject(NodeBox(node), forKey: key)
+        return node
     }
 
     private static func renderInline(_ text: String, size: CGFloat) -> AttributedString {
@@ -132,7 +153,7 @@ enum MathFormat {
             for ch in String(attributed[run.range].characters) {
                 if let k = placeholderIndex(ch), k < maths.count {
                     flush()
-                    result += renderer.render(MathParser.parse(maths[k]), fs: size)
+                    result += renderer.render(parsed(maths[k]), fs: size)
                 } else {
                     buffer.append(ch)
                 }
@@ -1254,17 +1275,18 @@ struct MathRichText: View {
     let text: String
     let fontSize: CGFloat
     let font: Font
+    var live = false
 
     var body: some View {
         let blocks = MathFormat.blocks(text).flatMap(Self.paragraphs)
         if blocks.count == 1, case let .text(t) = blocks[0] {
-            InlineMathText(text: t, fontSize: fontSize, font: font)
+            InlineMathText(text: t, fontSize: fontSize, font: font, cached: !live)
         } else {
             VStack(alignment: .leading, spacing: (fontSize * 0.4).rounded()) {
-                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                     switch block {
                     case let .text(t):
-                        InlineMathText(text: t, fontSize: fontSize, font: font)
+                        InlineMathText(text: t, fontSize: fontSize, font: font, cached: !live || index < blocks.count - 1)
                             .equatable()
                     case let .math(latex):
                         DisplayMathBlock(latex: latex, fontSize: fontSize)
@@ -1316,9 +1338,14 @@ private struct InlineMathText: View, Equatable {
     let text: String
     let fontSize: CGFloat
     let font: Font
+    var cached = true
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.text == rhs.text && lhs.fontSize == rhs.fontSize && lhs.font == rhs.font
+    }
 
     var body: some View {
-        Text(MathFormat.inline(text, size: fontSize))
+        Text(MathFormat.inline(text, size: fontSize, cached: cached))
             .font(font)
     }
 }
@@ -1337,7 +1364,7 @@ struct DisplayMath: View {
     let fontSize: CGFloat
 
     init(latex: String, fontSize: CGFloat) {
-        node = MathParser.parse(latex)
+        node = MathFormat.parsed(latex)
         self.fontSize = fontSize
     }
 

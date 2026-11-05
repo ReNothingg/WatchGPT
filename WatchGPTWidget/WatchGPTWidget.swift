@@ -27,8 +27,6 @@ struct AskControl: ControlWidget {
     }
 }
 
-// MARK: Timeline
-
 struct AskEntry: TimelineEntry {
     let date: Date
     let snapshot: WidgetSnapshot
@@ -51,7 +49,6 @@ struct AskProvider: TimelineProvider {
         let snapshot = SharedStore.load()
         let now = Date.now
         var dates = [now]
-        // Add an entry at each upcoming limit reset so the widget shows 100% on time.
         for window in [snapshot.usage?.primary, snapshot.usage?.secondary].compactMap({ $0 }) {
             if let reset = window.resetAt, reset > now, reset < now.addingTimeInterval(8 * 24 * 3600) {
                 dates.append(reset.addingTimeInterval(1))
@@ -59,6 +56,33 @@ struct AskProvider: TimelineProvider {
         }
         let entries = dates.sorted().map { AskEntry(date: $0, snapshot: snapshot) }
         completion(Timeline(entries: entries, policy: .never))
+    }
+}
+
+struct AskIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> AskEntry {
+        AskEntry(date: .now, snapshot: .preview)
+    }
+
+    func snapshot(for configuration: AskWidgetIntent, in context: Context) async -> AskEntry {
+        let snap = SharedStore.load()
+        return AskEntry(date: .now, snapshot: context.isPreview && snap.usage == nil ? .preview : snap)
+    }
+
+    func timeline(for configuration: AskWidgetIntent, in context: Context) async -> Timeline<AskEntry> {
+        let snapshot = SharedStore.load()
+        let now = Date.now
+        var dates = [now]
+        for window in [snapshot.usage?.primary, snapshot.usage?.secondary].compactMap({ $0 }) {
+            if let reset = window.resetAt, reset > now, reset < now.addingTimeInterval(8 * 24 * 3600) {
+                dates.append(reset.addingTimeInterval(1))
+            }
+        }
+        return Timeline(entries: dates.sorted().map { AskEntry(date: $0, snapshot: snapshot) }, policy: .never)
+    }
+
+    func recommendations() -> [AppIntentRecommendation<AskWidgetIntent>] {
+        [AppIntentRecommendation(intent: AskWidgetIntent(), description: "Спросить ChatGPT")]
     }
 }
 
@@ -73,13 +97,11 @@ extension WidgetSnapshot {
     )
 }
 
-// MARK: Widget
-
 struct AskWidget: Widget {
     let kind = SharedStore.askWidgetKind
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: AskProvider()) { entry in
+        AppIntentConfiguration(kind: kind, intent: AskWidgetIntent.self, provider: AskIntentProvider()) { entry in
             AskWidgetView(entry: entry)
                 .widgetURL(SharedStore.deepLinkAsk)
         }
@@ -196,9 +218,9 @@ struct AskWidgetView: View {
 }
 
 enum RingPalette {
-    static let mint = Color(red: 0.24, green: 0.92, blue: 0.68)
-    static let cyan = Color(red: 0.30, green: 0.86, blue: 0.96)
-    static let violet = Color(red: 0.70, green: 0.60, blue: 1.0)
+    static let mint = Color(red: 0.949, green: 0.949, blue: 0.969)
+    static let cyan = Color(red: 0.70, green: 0.70, blue: 0.72)
+    static let violet = Color(red: 0.50, green: 0.50, blue: 0.52)
 
     static func color(_ index: Int, _ remaining: Double) -> Color {
         if remaining < 20 { return Theme.usageColor(remaining) }

@@ -178,7 +178,7 @@ struct GPTChatView: View {
             } label: {
                 Label("Продолжить на часах", systemImage: "applewatch")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.onAccent)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity)
@@ -457,19 +457,26 @@ private struct ThoughtRow: View {
     @State private var open = false
 
     private var title: String { step.title.replacingOccurrences(of: "**", with: "") }
-    private var detail: String { step.detail.replacingOccurrences(of: "**", with: "") }
-    private var canOpen: Bool { detail.count > collapsedLines * 28 }
+
+    private var paragraphs: [String] {
+        step.detail.components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var canOpen: Bool {
+        paragraphs.count > 1 || (paragraphs.first?.count ?? 0) > collapsedLines * 30
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             if !title.isEmpty {
                 Text(title)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(ReasoningPalette.title)
             }
-            if !detail.isEmpty {
-                Text(detail)
-                    .font(.caption2)
+            if let first = paragraphs.first {
+                MarkdownText(text: open ? step.detail : first, style: .caption2)
                     .foregroundStyle(ReasoningPalette.text)
                     .lineLimit(open ? nil : collapsedLines)
                     .fixedSize(horizontal: false, vertical: true)

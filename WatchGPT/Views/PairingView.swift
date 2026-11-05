@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Connect your ChatGPT account: scan the QR with the iPhone, sign in, type the code.
 struct PairingView: View {
     @Environment(AuthService.self) private var auth
 

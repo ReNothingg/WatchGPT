@@ -1,7 +1,6 @@
 import AVFoundation
 import Observation
 
-/// Records the user's voice to a small AAC file and exposes the live level for the voice animation.
 @MainActor
 @Observable
 final class AudioRecorder {
@@ -109,7 +108,6 @@ final class AudioRecorder {
         startMetering()
     }
 
-    /// Stops and returns the recorded file (nil if nothing usable was captured).
     func stop() -> URL? {
         guard let recorder else { return nil }
         let duration = currentDuration
@@ -163,8 +161,6 @@ final class AudioRecorder {
             MainActor.assumeIsolated { self?.markPaused() }
         }
     }
-
-    // MARK: Metering
 
     private func startMetering() {
         stopMetering()

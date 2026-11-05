@@ -1,6 +1,5 @@
 import Foundation
 
-/// Tokens from "Sign in with ChatGPT" (the same OAuth flow Codex uses).
 struct AuthTokens: Codable, Equatable, Sendable {
     var idToken: String
     var accessToken: String
@@ -21,7 +20,6 @@ struct AuthTokens: Codable, Equatable, Sendable {
         return Date(timeIntervalSince1970: exp)
     }
 
-    /// Refresh 5 minutes before expiry, or after 8 days if expiry is unknown.
     var needsRefresh: Bool {
         if let exp = accessTokenExpiry { return exp.timeIntervalSinceNow < 5 * 60 }
         return Date.now.timeIntervalSince(lastRefresh) > 8 * 24 * 3600

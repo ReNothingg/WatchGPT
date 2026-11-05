@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Ring showing how much of the plan limit is left.
 struct UsageRing: View {
     var remaining: Double?
     var lineWidth: CGFloat = 3
     var showsText = true
+    var textSize: CGFloat = 11
+    var showsPercentSign = false
 
     var body: some View {
         let value = remaining ?? 0
@@ -16,17 +17,25 @@ struct UsageRing: View {
                 .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             if showsText {
-                Text(remaining.map { "\(Int($0.rounded()))" } ?? "–")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .minimumScaleFactor(0.6)
+                label
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .monospacedDigit()
+                    .padding(lineWidth + 1)
             }
         }
         .animation(.easeInOut, value: value)
     }
+
+    private var label: Text {
+        let font = Font.system(size: textSize, weight: .semibold, design: .rounded)
+        guard let remaining else { return Text("–").font(font) }
+        let number = Text("\(Int(remaining.rounded()))").font(font)
+        guard showsPercentSign else { return number }
+        return number + Text("%").font(.system(size: textSize * 0.7, weight: .semibold, design: .rounded))
+    }
 }
 
-/// "82% · 5ч   64% · нед" — compact summary of both windows.
 struct UsageLine: View {
     let usage: UsageSnapshot?
 
@@ -189,12 +198,11 @@ struct Spinner: View {
     }
 }
 
-/// The main mic button. Tap → record → OpenAI speech-to-text → question is sent.
-/// With the "Apple" engine it opens the system dictation instead.
 struct AskButton: View {
     @Environment(ChatStore.self) private var store
     var size: CGFloat = 44
     var halo = false
+    @State private var longPressAt: Date?
 
     var body: some View {
         ZStack {
@@ -210,13 +218,25 @@ struct AskButton: View {
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
             } else if store.usesCloudVoice {
                 Button {
+                    if let longPressAt, Date.now.timeIntervalSince(longPressAt) < 2 {
+                        self.longPressAt = nil
+                        return
+                    }
                     store.startVoice()
                 } label: {
                     MicCircle(size: size, halo: halo)
                 }
                 .buttonStyle(PressableStyle())
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                        longPressAt = .now
+                        store.typeQuestion()
+                    }
+                )
                 .doubleTapAction(isEnabled: !store.isVoiceSheetPresented)
                 .accessibilityLabel("Спросить голосом")
+                .accessibilityHint("Удерживайте, чтобы ввести текст")
+                .accessibilityAction(named: "Ввести текст") { store.typeQuestion() }
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
             } else {
                 TextFieldLink(prompt: Text("Спросите что угодно")) {
@@ -244,15 +264,15 @@ struct MicCircle: View {
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [Color(red: 0.35, green: 0.68, blue: 1.0), Theme.accent],
+                        colors: [.white, Color(red: 0.82, green: 0.82, blue: 0.84)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
-                .shadow(color: Theme.accent.opacity(halo ? 0.55 : 0.3), radius: halo ? size * 0.16 : 4)
+                .shadow(color: Theme.accent.opacity(halo ? 0.3 : 0.15), radius: halo ? size * 0.16 : 4)
             Image(systemName: "mic.fill")
                 .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onAccent)
         }
         .frame(width: size, height: size)
         .background {
@@ -297,7 +317,7 @@ private struct BusyCircle: View {
                         AngularGradient(colors: [Theme.accent.opacity(0), Theme.accent], center: .center),
                         style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                     )
-                    .rotationEffect(.radians(t * 4))
+                    .rotationEffect(.radians(t * 3))
                     .padding(1.5)
             }
             Image(systemName: "stop.fill")
@@ -309,20 +329,20 @@ private struct BusyCircle: View {
     }
 }
 
-/// Renders inline markdown (bold, italic, code, links) and keeps line breaks.
 struct MarkdownText: View {
     let text: String
     var style: Font.TextStyle = .body
     var scale: Double = 1
+    var live = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let base = UIFont.preferredFont(forTextStyle: uiStyle).pointSize
         if scale == 1 {
-            MathRichText(text: text, fontSize: base, font: .system(style))
+            MathRichText(text: text, fontSize: base, font: .system(style), live: live)
         } else {
             let size = (base * scale).rounded()
-            MathRichText(text: text, fontSize: size, font: .system(size: size))
+            MathRichText(text: text, fontSize: size, font: .system(size: size), live: live)
         }
     }
 

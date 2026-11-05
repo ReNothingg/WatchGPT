@@ -1,9 +1,7 @@
 import Foundation
 
-/// Talks to the ChatGPT backend with your subscription (the endpoints Codex uses).
 struct ChatGPTClient: Sendable {
     static let baseURL = URL(string: "https://chatgpt.com/backend-api")!
-    /// Codex client version reported to the backend (used to pick which models are offered).
     static var clientVersion: String { ClientVersion.current }
 
     let tokens: AuthTokens
@@ -51,8 +49,6 @@ struct ChatGPTClient: Sendable {
         var conversationID: String
     }
 
-    // MARK: Responses (streaming)
-
     func stream(messages: [ChatMessage], options: Options) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -65,6 +61,25 @@ struct ChatGPTClient: Sendable {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    private static let parsedTypes: Set<String> = [
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.output_item.added",
+        "codex.rate_limits",
+        "response.failed",
+        "error",
+    ]
+
+    private static func quickType(_ payload: String) -> String? {
+        let prefix = "{\"type\":\""
+        guard payload.hasPrefix(prefix) else { return nil }
+        let rest = payload.utf8.dropFirst(prefix.utf8.count)
+        guard let end = rest.prefix(64).firstIndex(of: UInt8(ascii: "\"")) else { return nil }
+        let name = payload[rest.startIndex..<end]
+        guard !name.contains("\\") else { return nil }
+        return String(name)
     }
 
     private func runStream(
@@ -103,6 +118,14 @@ struct ChatGPTClient: Sendable {
             guard line.hasPrefix("data:") else { continue }
             let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
             if payload == "[DONE]" { break }
+            if let quick = Self.quickType(payload) {
+                if quick == "response.completed" || quick == "response.incomplete" {
+                    continuation.yield(.completed)
+                    return
+                }
+                if !Self.parsedTypes.contains(quick) { continue }
+                if quick == "response.output_text.done", sawText { continue }
+            }
             guard let data = payload.data(using: .utf8),
                   let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let type = event["type"] as? String else { continue }
@@ -189,8 +212,6 @@ struct ChatGPTClient: Sendable {
         return body
     }
 
-    // MARK: Usage
-
     func fetchUsage() async throws -> UsageSnapshot {
         let request = makeRequest(Self.baseURL.appending(path: "wham/usage"), method: "GET")
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -249,8 +270,6 @@ struct ChatGPTClient: Sendable {
         return UsageSnapshot(primary: primary, secondary: secondary, planType: event["plan_type"] as? String, updatedAt: .now)
     }
 
-    // MARK: Models
-
     func fetchModels() async throws -> [ModelOption] {
         var components = URLComponents(url: Self.baseURL.appending(path: "codex/models"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "client_version", value: Self.clientVersion)]
@@ -280,8 +299,6 @@ struct ChatGPTClient: Sendable {
         }
         .sorted { $0.priority < $1.priority }
     }
-
-    // MARK: Helpers
 
     static let streamSession: URLSession = {
         let config = URLSessionConfiguration.default

@@ -73,7 +73,6 @@ struct ModelOption: Codable, Identifiable, Hashable, Sendable {
 
     var id: String { slug }
 
-    /// Used until the live list arrives from ChatGPT (and when offline).
     static let fallback: [ModelOption] = [
         .init(slug: "gpt-6.1-sol", displayName: "GPT-6.1-Sol", summary: "Основная модель на каждый день", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 1),
         .init(slug: "gpt-6-astra", displayName: "GPT-6-Astra", summary: "Самая умная, для сложных задач", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 2),

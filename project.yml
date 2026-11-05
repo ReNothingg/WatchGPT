@@ -1,6 +1,3 @@
-# Xcode project definition. The generated WatchGPT.xcodeproj is committed,
-# so you only need XcodeGen (`brew install xcodegen`) if you change this file:
-#   xcodegen generate
 name: WatchGPT
 options:
   deploymentTarget:
@@ -11,10 +8,8 @@ options:
 
 settings:
   base:
-    # ⬇️ Change to something unique, e.g. com.yourname.watchgpt
     BUNDLE_ID_BASE: com.example.watchgpt
     APP_GROUP: group.$(BUNDLE_ID_BASE)
-    # ⬇️ Or just pick your team in Xcode → Signing & Capabilities
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
@@ -52,6 +47,7 @@ targets:
         WKWatchOnly: true
         AppGroupID: $(APP_GROUP)
         NSMicrophoneUsageDescription: Микрофон нужен, чтобы вы могли задавать вопросы голосом.
+        NSLocationWhenInUseUsageDescription: Геопозиция нужна, чтобы запомнить место и поднимать виджет WatchGPT в смарт-стопке, когда вы там.
         WKBackgroundModes: [audio, self-care]
         NSUserActivityTypes: [watchgpt.chat]
         CFBundleURLTypes:

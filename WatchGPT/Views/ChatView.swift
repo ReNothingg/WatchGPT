@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case settings, models, usage, voice, history, diagnostics, clientVersion, quickPrompts, claude
+    case settings, models, usage, voice, history, diagnostics, clientVersion, quickPrompts, claude, places
     case gptChat(id: String, title: String)
 }
 
@@ -19,14 +19,14 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
                             ForEach(store.messages) { message in
-                                MessageRow(message: message, isLast: message.id == store.messages.last?.id)
+                                MessageRow(message: message, isLast: message.id == store.messages.last?.id, fontScale: store.answerFontScale)
                                     .equatable()
                                     .id(message.id)
                                     .transition(message.role == .user ? .userBubble : .reply)
                             }
                         }
                         .padding(.bottom, 56)
-                        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: store.messages.map(\.id))
+                        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: MessageListShape(store.messages))
                     }
                     .autoHidesChrome($chromeVisible)
                     .onChange(of: store.scrollTarget) { _, target in
@@ -44,10 +44,18 @@ struct ChatView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 NavigationLink(value: Route.usage) {
-                    UsageRing(remaining: store.usage?.tightest()?.remainingPercent(), lineWidth: 2.5, showsText: false)
-                        .frame(width: 17, height: 17)
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        UsageRing(
+                            remaining: store.usage?.tightest(at: context.date)?.remainingPercent(at: context.date),
+                            lineWidth: 2.5,
+                            textSize: 10,
+                            showsPercentSign: true
+                        )
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                    }
                 }
-                .accessibilityLabel("Лимиты")
+                .accessibilityLabel(limitsLabel)
             }
             if store.messages.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -87,6 +95,7 @@ struct ChatView: View {
             case .clientVersion: ClientVersionView()
             case .quickPrompts: QuickPromptsView()
             case .claude: ClaudeSettingsView()
+            case .places: PlacesView()
             case let .gptChat(id, title): GPTChatView(chatID: id, title: title)
             }
         }
@@ -94,7 +103,7 @@ struct ChatView: View {
             RecordView()
         }
         .handoffActivity(
-            isActive: store.handoff && store.path.isEmpty && store.lastAnswer != nil,
+            isActive: store.handoff && store.path.isEmpty && !store.isBusy && store.lastAnswer != nil,
             title: "Чат WatchGPT"
         ) {
             Handoff.url(conversationID: store.conversationID, messages: store.messages, claude: store.provider == .claude)
@@ -107,10 +116,14 @@ struct ChatView: View {
         }
     }
 
+    private var limitsLabel: String {
+        guard let left = store.usage?.tightest()?.remainingPercent() else { return "Лимиты" }
+        return "Лимиты, осталось \(Theme.percent(left))"
+    }
+
     private func openDictationFromWidget() {
         store.pendingAsk = false
         guard !store.isBusy else { return }
-        // Give the UI a moment to settle after launch, then start listening.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 350_000_000)
             if store.usesCloudVoice {
@@ -122,7 +135,6 @@ struct ChatView: View {
     }
 }
 
-/// Empty state: one big button. Tap → speak → answer.
 private struct HomeView: View {
     @State private var appeared = false
 
@@ -177,6 +189,16 @@ private struct HomeSideButton: View {
     }
 }
 
+private struct MessageListShape: Equatable {
+    let count: Int
+    let lastID: UUID?
+
+    init(_ messages: [ChatMessage]) {
+        count = messages.count
+        lastID = messages.last?.id
+    }
+}
+
 private extension AnyTransition {
     static var userBubble: AnyTransition {
         .asymmetric(
@@ -200,9 +222,10 @@ private struct MessageRow: View, Equatable {
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     let message: ChatMessage
     let isLast: Bool
+    let fontScale: Double
 
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
-        lhs.isLast == rhs.isLast && lhs.message == rhs.message
+        lhs.isLast == rhs.isLast && lhs.fontScale == rhs.fontScale && lhs.message == rhs.message
     }
 
     var body: some View {
@@ -268,7 +291,7 @@ private struct MessageRow: View, Equatable {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    MarkdownText(text: message.text, scale: store.answerFontScale)
+                    MarkdownText(text: message.text, scale: fontScale, live: isLast && store.status == .streaming)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .onTapGesture(count: 2) { store.speaker.toggle(message.text) }
                     if isLast && store.status == .streaming {

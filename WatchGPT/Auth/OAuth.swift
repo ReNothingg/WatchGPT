@@ -1,10 +1,7 @@
 import Foundation
 
-/// "Sign in with ChatGPT" via the device-code flow used by `codex login --device-auth`.
-/// The watch shows a QR + one-time code, you confirm on the iPhone, the watch receives tokens.
 enum OAuth {
     static let issuer = URL(string: "https://auth.openai.com")!
-    /// Public OAuth client id of the Codex CLI.
     static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 
     struct DeviceCode: Equatable, Sendable {
@@ -35,8 +32,6 @@ enum OAuth {
         }
     }
 
-    // MARK: Device code
-
     static func requestDeviceCode() async throws -> DeviceCode {
         let url = issuer.appending(path: "api/accounts/deviceauth/usercode")
         let (data, response) = try await postJSON(url, ["client_id": clientID])
@@ -64,7 +59,6 @@ enum OAuth {
         )
     }
 
-    /// Parses "2026-10-24T09:05:23.013148+00:00" (microseconds are trimmed for ISO8601DateFormatter).
     private static func parseDate(_ string: String?) -> Date? {
         guard var s = string else { return nil }
         if let dot = s.firstIndex(of: "."),
@@ -72,12 +66,10 @@ enum OAuth {
             s.removeSubrange(dot..<zone)
         }
         let date = ISO8601DateFormatter().date(from: s)
-        // Ignore obviously wrong values (clock skew etc.).
         guard let date, date > .now, date < .now.addingTimeInterval(3600) else { return nil }
         return date
     }
 
-    /// Polls until the user approves on the phone, then exchanges the code for tokens.
     static func waitForApproval(_ code: DeviceCode) async throws -> AuthTokens {
         let url = issuer.appending(path: "api/accounts/deviceauth/token")
         while true {
@@ -124,8 +116,6 @@ enum OAuth {
         return AuthTokens(idToken: id, accessToken: access, refreshToken: refresh, lastRefresh: .now)
     }
 
-    // MARK: Refresh
-
     enum RefreshFailure: Error { case permanent, transient(Error) }
 
     static func refresh(_ tokens: AuthTokens) async throws -> AuthTokens {
@@ -155,10 +145,6 @@ enum OAuth {
         return updated
     }
 
-    // MARK: OpenAI API key
-
-    /// Exchanges the ChatGPT id_token for an OpenAI API key (same as `codex login` does).
-    /// Used for OpenAI speech-to-text (gpt-4o-transcribe). Fails if the account has no API organization.
     static func obtainAPIKey(idToken: String) async throws -> String {
         var request = URLRequest(url: issuer.appending(path: "oauth/token"))
         request.httpMethod = "POST"
@@ -190,8 +176,6 @@ enum OAuth {
         if let message = obj["detail"] as? String { return message }
         return body
     }
-
-    // MARK: Helpers
 
     private static func postJSON(_ url: URL, _ body: [String: String]) async throws -> (Data, URLResponse) {
         var request = URLRequest(url: url)

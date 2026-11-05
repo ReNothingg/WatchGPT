@@ -33,6 +33,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Геопозиция нужна, чтобы запомнить место и поднимать виджет WatchGPT в смарт-стопке, когда вы там.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон нужен, чтобы вы могли задавать вопросы голосом.</string>
 	<key>NSUserActivityTypes</key>

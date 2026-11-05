@@ -29,7 +29,6 @@ final class AuthService {
 
     private(set) var phase: Phase
     private(set) var tokens: AuthTokens?
-    /// OpenAI API key for speech-to-text: obtained automatically from the ChatGPT login, or entered by hand.
     private(set) var apiKey: StoredAPIKey?
     private(set) var apiKeyError: String?
     private(set) var keyCheck: KeyCheck = .unknown
@@ -57,8 +56,6 @@ final class AuthService {
         apiKey = Keychain.load(StoredAPIKey.self, account: Self.apiKeyAccount)
         claudeKey = Keychain.load(StoredAPIKey.self, account: Self.claudeKeyAccount)
     }
-
-    // MARK: Anthropic API key (Claude)
 
     func setManualClaudeKey(_ raw: String) {
         let key = raw.filter { !$0.isWhitespace && $0 != "\"" && $0 != "'" }
@@ -96,9 +93,6 @@ final class AuthService {
         Keychain.save(value, account: Self.claudeKeyAccount)
     }
 
-    // MARK: OpenAI API key (speech-to-text)
-
-    /// Returns the stored key, or tries to obtain one from the ChatGPT login.
     func ensureAPIKey() async throws -> String {
         if let apiKey { return apiKey.key }
         return try await obtainAPIKey()
@@ -173,8 +167,6 @@ final class AuthService {
         Keychain.save(value, account: Self.apiKeyAccount)
     }
 
-    // MARK: Pairing
-
     func startPairing() {
         pairingTask?.cancel()
         phase = .requestingCode
@@ -210,16 +202,12 @@ final class AuthService {
         phase = .signedOut
     }
 
-    // MARK: Tokens
-
-    /// Returns tokens that are valid for at least a few minutes.
     func validTokens() async throws -> AuthTokens {
         guard let current = tokens else { throw AuthError.signedOut }
         if current.needsRefresh { return try await refresh() }
         return current
     }
 
-    /// Forces a refresh (e.g. after a 401). Concurrent callers share one request.
     @discardableResult
     func refresh() async throws -> AuthTokens {
         if let refreshTask { return try await refreshTask.value }

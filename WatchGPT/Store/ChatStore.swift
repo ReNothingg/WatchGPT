@@ -25,9 +25,7 @@ final class ChatStore {
     @ObservationIgnored private var effortOverrides: [String: [String]] = [:]
     private(set) var usageError: String?
 
-    /// Set by the widget deep link — the chat screen opens dictation right away.
     var pendingAsk = false
-    /// Id of the message the chat should scroll to (the latest question).
     private(set) var scrollTarget: UUID?
 
     var selectedModelSlug: String {
@@ -72,9 +70,14 @@ final class ChatStore {
     private(set) var voicePrompt: QuickPrompt?
     let usageHistory = UsageHistory()
 
-    static let answerFontScales: [Double] = [0.8, 0.9, 1.0, 1.15, 1.3, 1.5]
+    static let answerFontRange: ClosedRange<Double> = 0.7...1.5
+    static let answerFontStep: Double = 0.05
 
-    // Voice input
+    static func clampedFontScale(_ value: Double) -> Double {
+        let stepped = (value / answerFontStep).rounded() * answerFontStep
+        return min(max(stepped, answerFontRange.lowerBound), answerFontRange.upperBound)
+    }
+
     enum VoicePhase: Equatable { case idle, recording, transcribing, failed(String) }
     let recorder = AudioRecorder()
     let playback = RecordingPlayer()
@@ -100,7 +103,6 @@ final class ChatStore {
     @ObservationIgnored private var voiceCloseTask: Task<Void, Never>?
     private static let maxVoiceFailures = 3
 
-    /// Drives the full-screen recorder.
     var isVoiceSheetPresented: Bool {
         get { voicePhase != .idle }
         set { if !newValue { cancelVoice() } }
@@ -166,7 +168,7 @@ final class ChatStore {
         transcribeModel = d.string(forKey: Keys.transcribeModel).flatMap(TranscribeModel.init(rawValue:)) ?? .best
         voiceLanguage = d.string(forKey: Keys.voiceLanguage) ?? "auto"
         whisperMode = d.object(forKey: Keys.whisperMode) as? Bool ?? false
-        answerFontScale = d.object(forKey: Keys.answerFontScale) as? Double ?? 1.0
+        answerFontScale = Self.clampedFontScale(d.object(forKey: Keys.answerFontScale) as? Double ?? 1.0)
         quickPrompts = d.data(forKey: Keys.quickPrompts).flatMap { try? JSONDecoder().decode([QuickPrompt].self, from: $0) }
             ?? QuickPrompt.defaults
         Transcriber.resetChatGPTAvailability()
@@ -227,9 +229,6 @@ final class ChatStore {
         messages.last { $0.role == .assistant && !$0.isError && !$0.text.isEmpty }
     }
 
-    // MARK: Voice
-
-    /// Whether the mic button should record with OpenAI speech-to-text (vs. Apple dictation).
     var usesCloudVoice: Bool { voiceEngine != .apple }
 
     func startVoice() {
@@ -270,7 +269,6 @@ final class ChatStore {
         }
     }
 
-    /// Stop recording → transcribe → send.
     func finishVoice() {
         guard voicePhase == .recording else { return }
         guard let url = recorder.stop() else {
@@ -300,7 +298,14 @@ final class ChatStore {
         voicePhase = .idle
     }
 
-    /// Text from the Apple dictation fallback on the error screen.
+    func typeQuestion() {
+        guard !isBusy, voicePhase == .idle else { return }
+        WKHaptics.click()
+        speaker.stop()
+        playback.stop()
+        Dictation.present { [weak self] text in self?.send(text) }
+    }
+
     func sendFromFallback(_ text: String) {
         let message = withVoicePrompt(text)
         cancelVoice()
@@ -409,8 +414,6 @@ final class ChatStore {
         }.joined(separator: "\n")
     }
 
-    // MARK: Sending
-
     func send(_ raw: String) {
         didAutoResume = false
         submit(raw)
@@ -468,7 +471,6 @@ final class ChatStore {
         }
     }
 
-    /// Re-asks the last question (after an error).
     func retry() {
         didAutoResume = false
         resend()
@@ -486,8 +488,6 @@ final class ChatStore {
         sendTask?.cancel()
         sendTask = nil
     }
-
-    // MARK: Background
 
     func sceneEnteredBackground() {
         isInBackground = true
@@ -644,17 +644,21 @@ final class ChatStore {
                 }
 
                 var pending = ""
+                var shownLength = 0
                 var lastFlush = ContinuousClock.now - .seconds(1)
-                func flushInterval() -> Duration {
-                    if WKApplication.shared().applicationState != .active { return .seconds(1) }
-                    return PowerMonitor.shared.isLowPower ? .milliseconds(250) : .milliseconds(120)
-                }
+                var interval = Self.flushInterval(length: 0)
+                var lastIntervalCheck = ContinuousClock.now
                 func flush() {
                     guard !pending.isEmpty else { return }
                     let chunk = pending
                     pending = ""
                     lastFlush = .now
+                    shownLength += chunk.utf8.count
                     update(replyID) { $0.text += chunk }
+                    if lastFlush - lastIntervalCheck >= .seconds(1) {
+                        lastIntervalCheck = lastFlush
+                        interval = Self.flushInterval(length: shownLength)
+                    }
                 }
 
                 do {
@@ -669,7 +673,7 @@ final class ChatStore {
                         case let .textDelta(delta):
                             if status != .streaming { status = .streaming }
                             pending += delta
-                            if ContinuousClock.now - lastFlush >= flushInterval() { flush() }
+                            if ContinuousClock.now - lastFlush >= interval { flush() }
                         case .searching:
                             if status != .streaming && status != .searching { status = .searching }
                         case let .usage(snapshot):
@@ -722,6 +726,18 @@ final class ChatStore {
                 return
             }
         }
+    }
+
+    private static func flushInterval(length: Int) -> Duration {
+        if WKApplication.shared().applicationState != .active { return .seconds(1) }
+        let base: Int
+        switch length {
+        case ..<600: base = 150
+        case ..<1500: base = 220
+        case ..<3000: base = 320
+        default: base = 450
+        }
+        return .milliseconds(PowerMonitor.shared.isLowPower ? base * 2 : base)
     }
 
     private func fail(_ replyID: UUID, _ error: Error) {
@@ -822,8 +838,6 @@ final class ChatStore {
         messages.last { $0.id == id }?.text ?? ""
     }
 
-    // MARK: Usage & models
-
     func handle(url: URL) {
         guard url.scheme == "watchgpt" else { return }
         switch url.host {
@@ -856,7 +870,6 @@ final class ChatStore {
     private static let usageMaxAge: TimeInterval = 120
     private static let modelsMaxAge: TimeInterval = 6 * 3600
 
-    /// Refreshes limits and the model list (throttled unless forced).
     func refreshMeta(force: Bool = false) async {
         guard auth.isSignedIn else { return }
         let now = Date.now
@@ -1047,8 +1060,6 @@ final class ChatStore {
         publishWidget()
     }
 
-    // MARK: Widget
-
     func publishWidget() {
         let snapshot = WidgetSnapshot(
             signedIn: auth.isSignedIn,
@@ -1082,8 +1093,6 @@ final class ChatStore {
         let flat = Speaker.plain(text).split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return flat.count > limit ? String(flat.prefix(limit)) + "…" : flat
     }
-
-    // MARK: Persistence
 
     private static let historyLimit = 60
     private static let importLimit = 50

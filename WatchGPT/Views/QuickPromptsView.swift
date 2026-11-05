@@ -87,7 +87,7 @@ private struct AddQuickPromptView: View {
                             .foregroundStyle(Theme.secondaryText)
                     }
                 }
-                .tint(Theme.accent)
+                .tint(Theme.toggleOn)
                 Button {
                     onSave(QuickPrompt(text: trimmed, asksVoice: asksVoice))
                     WKHaptics.success()

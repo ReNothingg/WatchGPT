@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Full-screen recorder: live waveform while you talk, then "Распознаю…", then the question is sent.
 struct RecordView: View {
     @Environment(ChatStore.self) private var store
 

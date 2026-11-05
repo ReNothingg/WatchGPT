@@ -1,14 +1,9 @@
 import Foundation
 
-/// Where speech is turned into text.
 enum VoiceEngine: String, CaseIterable, Codable, Sendable {
-    /// ChatGPT dictation first, then OpenAI gpt-4o-transcribe.
     case auto
-    /// ChatGPT's own dictation endpoint (part of the subscription; unofficial).
     case chatgpt
-    /// OpenAI speech-to-text API (gpt-4o-transcribe) with the key from your login.
     case openai
-    /// Built-in watchOS dictation.
     case apple
 
     var title: String {
@@ -68,7 +63,6 @@ enum Transcriber {
         ("kk", "Қазақша"), ("pl", "Polski"), ("zh", "中文"), ("ja", "日本語"), ("ko", "한국어"), ("ar", "العربية"),
     ]
 
-    /// Context for the speech model: keeps the language and writes spoken math as formulas.
     static let prompt = """
     Transcribe exactly what is said, in the language it is spoken in, with normal punctuation. \
     The speaker may dictate mathematics, physics or chemistry. Write spoken formulas in compact math notation \
@@ -159,8 +153,6 @@ enum Transcriber {
         UserDefaults.standard.removeObject(forKey: chatgptBlockedKey)
     }
 
-    // MARK: ChatGPT dictation (subscription)
-
     static let desktopOriginator = "Codex Desktop"
     static let desktopVersion = "26.429.30905"
 
@@ -201,8 +193,6 @@ enum Transcriber {
         }
     }
 
-    // MARK: OpenAI speech-to-text
-
     @MainActor
     private static func viaOpenAI(_ audio: Audio, model: TranscribeModel, prompt: String, language: String, auth: AuthService) async throws -> Result {
         var key = try await auth.ensureAPIKey()
@@ -239,7 +229,6 @@ enum Transcriber {
             let message = (error?["message"] as? String) ?? ""
 
             if status == 401 {
-                // An auto-obtained key may have been rotated: fetch a fresh one once.
                 if !retriedKey, auth.apiKey?.isManual != true, let fresh = try? await auth.obtainAPIKey() {
                     key = fresh
                     retriedKey = true
@@ -255,7 +244,6 @@ enum Transcriber {
     }
 }
 
-/// Minimal multipart/form-data body builder.
 struct MultipartForm {
     private let boundary = "WatchGPT-\(UUID().uuidString)"
     private var body = Data()

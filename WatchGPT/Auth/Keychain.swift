@@ -1,7 +1,6 @@
 import Foundation
 import Security
 
-/// Tiny wrapper around the Keychain for storing the ChatGPT tokens.
 enum Keychain {
     private static let service = "WatchGPT.auth"
 

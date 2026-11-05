@@ -57,8 +57,6 @@ struct AnthropicClient: Sendable {
         var context: String?
     }
 
-    // MARK: Messages (streaming)
-
     func stream(messages: [ChatMessage], options: Options) -> AsyncThrowingStream<ChatGPTClient.StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -238,8 +236,6 @@ struct AnthropicClient: Sendable {
         return dynamic.contains(model) ? "web_search_20260209" : "web_search_20250305"
     }
 
-    // MARK: Models
-
     func fetchModels() async throws -> [ModelOption] {
         var components = URLComponents(url: Self.baseURL.appending(path: "models"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "limit", value: "100")]
@@ -282,8 +278,6 @@ struct AnthropicClient: Sendable {
         if id.contains("haiku") { return "Самая быстрая и дешёвая" }
         return nil
     }
-
-    // MARK: Helpers
 
     func makeRequest(_ url: URL, method: String) -> URLRequest {
         var request = URLRequest(url: url)

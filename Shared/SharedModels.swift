@@ -1,18 +1,15 @@
 import Foundation
 
-/// One rate-limit window of the ChatGPT plan (e.g. the 5-hour or the weekly window).
 struct UsageWindow: Codable, Equatable, Sendable {
     var usedPercent: Double
     var windowMinutes: Int?
     var resetAt: Date?
 
-    /// Percent left right now (resets to 100 once the window has rolled over).
     func remainingPercent(at date: Date = .now) -> Double {
         if let resetAt, date >= resetAt { return 100 }
         return min(100, max(0, 100 - usedPercent))
     }
 
-    /// "5ч", "нед", "24ч"…
     var shortLabel: String {
         guard let m = windowMinutes, m > 0 else { return "лимит" }
         if m >= 7 * 24 * 60 - 60 { return "нед" }
@@ -36,7 +33,6 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var limitReached: Bool = false
     var updatedAt: Date = .now
 
-    /// The window that is closest to running out — what the user cares about.
     func tightest(at date: Date = .now) -> UsageWindow? {
         [primary, secondary].compactMap { $0 }.min { $0.remainingPercent(at: date) < $1.remainingPercent(at: date) }
     }
@@ -59,7 +55,6 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         return UsageSnapshot(primary: normalized(primary), secondary: normalized(secondary), updatedAt: .distantPast)
     }
 
-    /// Merges a partial update (e.g. from response headers) over the previous value.
     func merged(with newer: UsageSnapshot) -> UsageSnapshot {
         UsageSnapshot(
             primary: newer.primary ?? primary,
@@ -87,7 +82,6 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-/// What the app shares with the widget through the App Group.
 struct WidgetSnapshot: Codable, Equatable, Sendable {
     var signedIn: Bool = false
     var usage: UsageSnapshot?
@@ -116,7 +110,6 @@ enum SharedStore {
         return components.url ?? deepLinkOpen
     }
 
-    /// App Group id comes from Info.plist (`AppGroupID`, set from the APP_GROUP build setting).
     static let groupID: String? = Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as? String
 
     static let defaults: UserDefaults = {

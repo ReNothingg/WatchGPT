@@ -2,7 +2,6 @@ import AVFoundation
 import NaturalLanguage
 import Observation
 
-/// Reads answers aloud through the watch speaker (or AirPods).
 @MainActor
 @Observable
 final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
@@ -55,7 +54,6 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    /// Strips markdown and links so the voice doesn't read symbols.
     static func plain(_ text: String) -> String {
         var s = MathFormat.plain(text)
         s = s.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)

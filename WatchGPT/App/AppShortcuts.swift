@@ -25,7 +25,7 @@ struct WatchGPTShortcuts: AppShortcutsProvider {
         )
     }
 
-    static var shortcutTileColor: ShortcutTileColor { .teal }
+    static var shortcutTileColor: ShortcutTileColor { .grayBlue }
 }
 
 struct AskQuestionIntent: AppIntent {

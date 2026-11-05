@@ -62,7 +62,7 @@ struct LiveTimeline<Content: View>: View {
     }
 
     private func isPaused(lowPower: Bool) -> Bool {
-        if !isActive || isLuminanceReduced || isIdle { return true }
+        if !isActive || isLuminanceReduced || isIdle || scenePhase != .active { return true }
         switch role {
         case .decorative: return lowPower || reduceMotion
         case .status: return reduceMotion
@@ -71,10 +71,9 @@ struct LiveTimeline<Content: View>: View {
     }
 
     private func rate(lowPower: Bool) -> Double {
-        guard lowPower else { return fps }
         switch role {
-        case .decorative, .status: return min(fps, 10)
-        case .feedback: return min(fps, 15)
+        case .decorative, .status: return min(fps, lowPower ? 10 : 20)
+        case .feedback: return min(fps, lowPower ? 15 : 30)
         }
     }
 }

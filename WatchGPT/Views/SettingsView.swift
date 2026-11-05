@@ -84,6 +84,16 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     CardDivider()
+                    NavigationLink(value: Route.places) {
+                        SettingsRow(title: "Умная стопка") {
+                            let count = PlaceRelevance.shared.places.count
+                            Text(count == 0 ? "нет мест" : "\(count) \(SmartPlaceStore.noun(count))")
+                                .foregroundStyle(Theme.secondaryText)
+                                .monospacedDigit()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    CardDivider()
                     NavigationLink(value: Route.diagnostics) {
                         SettingsRow(title: "Диагностика") {
                             let count = DiagnosticsLog.shared.entries.filter { $0.date.timeIntervalSinceNow > -86_400 }.count
@@ -150,7 +160,7 @@ private struct ToggleTile: View {
     let icon: String
     @Binding var isOn: Bool
     var onColor: Color = Theme.accent
-    var onText: Color = .white
+    var onText: Color = Theme.onAccent
 
     var body: some View {
         if #available(watchOS 26.0, *) {
@@ -230,10 +240,7 @@ private struct ToggleTile: View {
 private struct AnswerFontCard: View {
     @Binding var scale: Double
 
-    private let scales = ChatStore.answerFontScales
-    private var index: Int {
-        scales.firstIndex(of: scale) ?? scales.firstIndex(of: 1.0) ?? 0
-    }
+    private var isDefault: Bool { abs(scale - 1) < 0.001 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -243,41 +250,102 @@ private struct AnswerFontCard: View {
                 Spacer(minLength: 4)
                 Text(Theme.percent(scale * 100))
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(scale == 1 ? Theme.secondaryText : Theme.accent)
+                    .foregroundStyle(isDefault ? Theme.secondaryText : Theme.accent)
                     .monospacedDigit()
                     .contentTransition(.numericText())
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                guard !isDefault else { return }
+                withAnimation(.snappy(duration: 0.2)) { scale = 1 }
+                WKHaptics.click()
             }
             MarkdownText(text: "Так будет выглядеть ответ.", scale: scale)
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .minimumScaleFactor(0.5)
                 .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
-            HStack(spacing: 6) {
-                stepButton(icon: "textformat.size.smaller", label: "Уменьшить шрифт", delta: -1)
-                stepButton(icon: "textformat.size.larger", label: "Увеличить шрифт", delta: 1)
-            }
+            FontScaleSlider(scale: $scale)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .glassBackground(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .contain)
+        .animation(.snappy(duration: 0.2), value: scale)
+    }
+}
+
+private struct FontScaleSlider: View {
+    @Binding var scale: Double
+
+    private let range = ChatStore.answerFontRange
+    private let step = ChatStore.answerFontStep
+
+    private var fraction: Double {
+        (scale - range.lowerBound) / (range.upperBound - range.lowerBound)
     }
 
-    private func stepButton(icon: String, label: String, delta: Int) -> some View {
-        let target = index + delta
-        let enabled = scales.indices.contains(target)
+    var body: some View {
+        HStack(spacing: 6) {
+            stepButton(icon: "textformat.size.smaller", label: "Уменьшить шрифт", delta: -step)
+            GeometryReader { geo in
+                let width = geo.size.width
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Theme.raised)
+                    Capsule()
+                        .fill(Theme.accent)
+                        .frame(width: max(10, width * fraction))
+                    Circle()
+                        .fill(Theme.onAccent)
+                        .frame(width: 10, height: 10)
+                        .offset(x: max(0, width * fraction - 10))
+                }
+                .frame(height: 10)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            guard width > 0 else { return }
+                            let t = min(max(value.location.x / width, 0), 1)
+                            set(range.lowerBound + t * (range.upperBound - range.lowerBound))
+                        }
+                )
+            }
+            .frame(height: 32)
+            stepButton(icon: "textformat.size.larger", label: "Увеличить шрифт", delta: step)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Шрифт ответа")
+        .accessibilityValue(Theme.percent(scale * 100))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: set(scale + step)
+            case .decrement: set(scale - step)
+            @unknown default: break
+            }
+        }
+    }
+
+    private func set(_ value: Double) {
+        let next = ChatStore.clampedFontScale(value)
+        guard abs(next - scale) > 0.001 else { return }
+        scale = next
+        WKHaptics.click()
+    }
+
+    private func stepButton(icon: String, label: String, delta: Double) -> some View {
+        let enabled = range.contains(((scale + delta) * 100).rounded() / 100)
         return Button {
-            guard enabled else { return }
-            withAnimation(.snappy(duration: 0.2)) { scale = scales[target] }
-            WKHaptics.click()
+            set(scale + delta)
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(enabled ? .white : Theme.secondaryText.opacity(0.5))
-                .frame(maxWidth: .infinity)
-                .frame(height: 32)
-                .glassBackground(Capsule(), fill: Theme.raised, interactive: true)
-                .contentShape(Capsule())
+                .frame(width: 32, height: 32)
+                .glassBackground(Circle(), fill: Theme.raised, interactive: true)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
@@ -612,7 +680,7 @@ struct EffortBar: View {
         let clamped = min(max(i, 0), efforts.count - 1)
         guard efforts[clamped] != selection else { return }
         withAnimation(.snappy(duration: 0.2)) { selection = efforts[clamped] }
-        WKHaptics.click()
+        WKHaptics.level(clamped, of: efforts.count)
     }
 }
 
@@ -762,7 +830,7 @@ struct VoiceSettingsView: View {
             if store.voiceEngine != .apple {
                 Section {
                     Toggle("Режим шёпота", isOn: $store.whisperMode)
-                        .tint(Theme.accent)
+                        .tint(Theme.toggleOn)
                 } footer: {
                     Text("Для тихой речи: запись без потерь, усиление громкости и точная модель OpenAI, если есть API-ключ. Говорите, поднеся часы ко рту.")
                 }

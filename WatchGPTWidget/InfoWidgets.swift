@@ -1,8 +1,6 @@
 import SwiftUI
 import WidgetKit
 
-// MARK: Last answer
-
 struct AnswerEntry: TimelineEntry {
     let date: Date
     let answer: WidgetAnswer?
@@ -140,8 +138,6 @@ extension WidgetAnswer {
         chatID: ""
     )
 }
-
-// MARK: Limits
 
 struct LimitsWidget: Widget {
     var body: some WidgetConfiguration {

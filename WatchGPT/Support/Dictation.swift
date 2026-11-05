@@ -1,8 +1,5 @@
 import WatchKit
 
-/// Opens the system dictation sheet programmatically (used when the app is opened from the widget).
-/// The regular mic button uses SwiftUI's `TextFieldLink`, so this is only a shortcut;
-/// if it is unavailable the user just taps the mic.
 enum Dictation {
     @MainActor
     @discardableResult

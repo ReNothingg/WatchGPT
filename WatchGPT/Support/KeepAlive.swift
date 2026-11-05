@@ -1,6 +1,5 @@
 import WatchKit
 
-/// Keeps the app frontmost and running while the wrist is down (recording, waiting for an answer).
 @MainActor
 final class KeepAlive: NSObject, WKExtendedRuntimeSessionDelegate {
     private var session: WKExtendedRuntimeSession?

@@ -10,17 +10,17 @@ struct VoiceBlob: View {
 
     var body: some View {
         LiveTimeline(role: .feedback) { date in
-            let current = level()
-            Canvas { ctx, size in
-                engine.step(to: date, level: current, mode: mode)
-                BlobPainter(state: engine, coreRatio: coreRatio).draw(in: &ctx, size: size)
+            let state = engine.step(to: date, level: level(), mode: mode)
+            let ratio = coreRatio
+            Canvas(rendersAsynchronously: true) { ctx, size in
+                BlobPainter(state: state, coreRatio: ratio).draw(in: &ctx, size: size)
             }
         }
         .accessibilityHidden(true)
     }
 }
 
-final class BlobEngine {
+struct BlobState {
     var level = 0.0
     var listening = 1.0
     var paused = 0.0
@@ -29,13 +29,23 @@ final class BlobEngine {
     var spin = 0.0
     var ripple = 0.0
     var appear = 0.0
+}
+
+final class BlobEngine {
+    private var state = BlobState()
     private var lastTime: Double?
 
-    func step(to date: Date, level target: Double, mode: VoiceMode) {
+    func step(to date: Date, level target: Double, mode: VoiceMode) -> BlobState {
         let now = date.timeIntervalSinceReferenceDate
         let dt = lastTime.map { min(0.1, max(0, now - $0)) } ?? 0
         lastTime = now
+        state.advance(dt: dt, level: target, mode: mode)
+        return state
+    }
+}
 
+private extension BlobState {
+    mutating func advance(dt: Double, level target: Double, mode: VoiceMode) {
         let clamped = pow(min(1, max(0, target)), 0.7)
         let rate = clamped > level ? 16.0 : 5.0
         level += (clamped - level) * (1 - exp(-dt * rate))
@@ -64,18 +74,18 @@ private struct RGB {
         Color(red: r, green: g, blue: b).opacity(opacity)
     }
 
-    static let green = RGB(r: 0.063, g: 0.80, b: 0.55)
-    static let mint = RGB(r: 0.16, g: 0.80, b: 0.62)
-    static let accent = RGB(r: 0.188, g: 0.835, b: 0.784)
-    static let teal = RGB(r: 0.10, g: 0.78, b: 0.86)
-    static let blue = RGB(r: 0.25, g: 0.48, b: 1.0)
-    static let violet = RGB(r: 0.55, g: 0.36, b: 1.0)
+    static let green = RGB(r: 0.96, g: 0.96, b: 0.97)
+    static let mint = RGB(r: 0.90, g: 0.90, b: 0.92)
+    static let accent = RGB(r: 0.84, g: 0.84, b: 0.86)
+    static let teal = RGB(r: 0.74, g: 0.74, b: 0.76)
+    static let blue = RGB(r: 0.60, g: 0.60, b: 0.62)
+    static let violet = RGB(r: 0.50, g: 0.50, b: 0.52)
     static let gray = RGB(r: 0.36, g: 0.36, b: 0.39)
     static let grayLight = RGB(r: 0.55, g: 0.55, b: 0.58)
 }
 
 private struct BlobPainter {
-    let state: BlobEngine
+    let state: BlobState
     let coreRatio: CGFloat
 
     func draw(in ctx: inout GraphicsContext, size: CGSize) {
@@ -166,7 +176,7 @@ private struct BlobPainter {
 
     private func blob(center: CGPoint, radius: CGFloat, amp: Double, seed: Double, twist: Double) -> Path {
         var path = Path()
-        let steps = 72
+        let steps = 56
         let t = state.phase
         for i in 0...steps {
             let theta = Double(i) / Double(steps) * 2 * .pi
@@ -238,11 +248,10 @@ struct EdgeGlow: View {
     @State private var engine = GlowEngine()
 
     var body: some View {
-        LiveTimeline(role: .feedback) { date in
-            let current = level()
-            Canvas { ctx, size in
-                engine.step(to: date, level: current, mode: mode)
-                GlowPainter(state: engine).draw(in: &ctx, size: size)
+        LiveTimeline(role: .feedback, fps: 20) { date in
+            let state = engine.step(to: date, level: level(), mode: mode)
+            Canvas(rendersAsynchronously: true) { ctx, size in
+                GlowPainter(state: state).draw(in: &ctx, size: size)
             }
         }
         .allowsHitTesting(false)
@@ -250,19 +259,29 @@ struct EdgeGlow: View {
     }
 }
 
-final class GlowEngine {
+struct GlowState {
     var energy = 0.0
     var appear = 0.0
     var angleA = 0.0
     var angleB = 0.0
     var processing = 0.0
+}
+
+final class GlowEngine {
+    private var state = GlowState()
     private var lastTime: Double?
 
-    func step(to date: Date, level: Double, mode: VoiceMode) {
+    func step(to date: Date, level: Double, mode: VoiceMode) -> GlowState {
         let now = date.timeIntervalSinceReferenceDate
         let dt = lastTime.map { min(0.1, max(0, now - $0)) } ?? 0
         lastTime = now
+        state.advance(dt: dt, now: now, level: level, mode: mode)
+        return state
+    }
+}
 
+private extension GlowState {
+    mutating func advance(dt: Double, now: Double, level: Double, mode: VoiceMode) {
         let target: Double
         switch mode {
         case .listening: target = 0.18 + 0.82 * min(1, max(0, level))
@@ -279,22 +298,24 @@ final class GlowEngine {
 }
 
 private struct GlowPainter {
-    let state: GlowEngine
+    let state: GlowState
+
+    private static let colorsA = Gradient(colors: [
+        RGB.green.color(1), RGB.teal.color(0.25), RGB.blue.color(1),
+        RGB.violet.color(0.35), RGB.teal.color(1), RGB.green.color(0.3), RGB.green.color(1),
+    ])
+    private static let colorsB = Gradient(colors: [
+        RGB.blue.color(0.2), RGB.green.color(1), RGB.violet.color(0.2),
+        RGB.teal.color(1), RGB.blue.color(0.2),
+    ])
 
     func draw(in ctx: inout GraphicsContext, size: CGSize) {
         let rect = CGRect(origin: .zero, size: size)
         let corner = min(size.width, size.height) * 0.24
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
         let e = state.energy * state.appear
-
-        let colorsA = Gradient(colors: [
-            RGB.green.color(1), RGB.teal.color(0.25), RGB.blue.color(1),
-            RGB.violet.color(0.35), RGB.teal.color(1), RGB.green.color(0.3), RGB.green.color(1),
-        ])
-        let colorsB = Gradient(colors: [
-            RGB.blue.color(0.2), RGB.green.color(1), RGB.violet.color(0.2),
-            RGB.teal.color(1), RGB.blue.color(0.2),
-        ])
+        let colorsA = Self.colorsA
+        let colorsB = Self.colorsB
 
         let outer = Path(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerRadius: corner, style: .continuous)
 

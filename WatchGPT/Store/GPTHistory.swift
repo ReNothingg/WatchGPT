@@ -37,13 +37,22 @@ final class GPTHistory {
         var syncedAt: Date?
     }
 
+    @ObservationIgnored private var revision = 0
+
     init(auth: AuthService) {
         self.auth = auth
-        if let data = try? Data(contentsOf: Self.fileURL),
-           let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) {
-            chats = snapshot.chats
-            syncedAt = snapshot.syncedAt
-        }
+        Task { [weak self] in await self?.loadSaved() }
+    }
+
+    private func loadSaved() async {
+        let url = Self.fileURL
+        let snapshot = await Task.detached(priority: .userInitiated) { () -> Snapshot? in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(Snapshot.self, from: data)
+        }.value
+        guard let snapshot, revision == 0 else { return }
+        chats = snapshot.chats
+        syncedAt = snapshot.syncedAt
     }
 
     var isLoading: Bool { phase == .loading }
@@ -67,6 +76,7 @@ final class GPTHistory {
                 return
             }
             var seen = Set<String>()
+            revision += 1
             chats = page.items.filter { seen.insert($0.id).inserted }
             apply(page)
             loadMoreError = nil
@@ -97,6 +107,7 @@ final class GPTHistory {
             guard auth.isSignedIn else { return }
             let known = Set(chats.map(\.id))
             let fresh = page.items.filter { !known.contains($0.id) }
+            revision += 1
             chats += fresh
             apply(page)
             if fresh.isEmpty || chats.count >= Self.maxChats { hasMore = false }
@@ -158,6 +169,7 @@ final class GPTHistory {
     }
 
     func clear() {
+        revision += 1
         chats = []
         phase = .idle
         syncedAt = nil

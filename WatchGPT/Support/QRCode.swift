@@ -1,8 +1,5 @@
 import Foundation
 
-/// Minimal QR Code generator (byte mode), ported from Project Nayuki's
-/// QR Code generator library (MIT License, https://www.nayuki.io/page/qr-code-generator-library).
-/// watchOS has no CoreImage, so the pairing QR is drawn from this matrix.
 struct QRCode {
     enum ECC: Int {
         case low = 0, medium, quartile, high
@@ -24,13 +21,10 @@ struct QRCode {
     private(set) var modules: [[Bool]]
     private var isFunction: [[Bool]]
 
-    /// Returns true for a dark module. Coordinates are (x: column, y: row).
     func isDark(x: Int, y: Int) -> Bool {
         guard x >= 0, y >= 0, x < size, y < size else { return false }
         return modules[y][x]
     }
-
-    // MARK: Encoding
 
     static func encode(_ text: String, ecc: ECC = .medium, boostECC: Bool = true, forcedMask: Int? = nil) -> QRCode? {
         encode(bytes: Array(text.utf8), ecc: ecc, boostECC: boostECC, forcedMask: forcedMask)
@@ -60,7 +54,7 @@ struct QRCode {
         }
 
         var bits = BitBuffer()
-        bits.append(0x4, count: 4) // byte mode
+        bits.append(0x4, count: 4)
         bits.append(bytes.count, count: charCountBits(version: version))
         for b in bytes { bits.append(Int(b), count: 8) }
 
@@ -104,7 +98,7 @@ struct QRCode {
                     chosen = m
                     minPenalty = penalty
                 }
-                applyMask(m) // XOR undo
+                applyMask(m)
             }
         }
         self.mask = chosen
@@ -112,8 +106,6 @@ struct QRCode {
         drawFormatBits(chosen)
         isFunction = []
     }
-
-    // MARK: Function patterns
 
     private mutating func drawFunctionPatterns() {
         for i in 0..<size {
@@ -208,8 +200,6 @@ struct QRCode {
         return result
     }
 
-    // MARK: Codewords
-
     private func addEccAndInterleave(_ data: [UInt8]) -> [UInt8] {
         let numBlocks = QRCode.numBlocks[ecc.rawValue][version]
         let blockEccLen = QRCode.eccPerBlock[ecc.rawValue][version]
@@ -278,8 +268,6 @@ struct QRCode {
             }
         }
     }
-
-    // MARK: Penalty
 
     private func penaltyScore() -> Int {
         var result = 0
@@ -353,8 +341,6 @@ struct QRCode {
         for i in stride(from: history.count - 1, to: 0, by: -1) { history[i] = history[i - 1] }
         history[0] = length
     }
-
-    // MARK: Helpers
 
     private func bit(_ x: Int, _ i: Int) -> Bool { (x >> i) & 1 != 0 }
 

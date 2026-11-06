@@ -64,7 +64,7 @@ struct TableBlockView: View {
 
     private func stacked(size: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(bodyRows.isEmpty ? [0] : bodyRows, id: \.self) { r in
+            ForEach(bodyRows, id: \.self) { r in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(MathFormat.inline(rows[r][0], size: size))
                         .font(.system(size: size, weight: .semibold))

@@ -38,24 +38,22 @@ struct ShimmerText: View {
     var period: Double = 1.6
 
     var body: some View {
-        LiveTimeline(role: .status) { date in
+        LiveTimeline(role: .status, fps: 12) { date in
             let p = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
             let x = -0.6 + p * 2.2
             Text(text)
                 .font(font)
-                .foregroundStyle(base)
-                .overlay {
+                .foregroundStyle(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0), location: 0),
-                            .init(color: .white.opacity(0.95), location: 0.5),
-                            .init(color: .white.opacity(0), location: 1),
+                            .init(color: base, location: 0),
+                            .init(color: .white, location: 0.5),
+                            .init(color: base, location: 1),
                         ],
                         startPoint: UnitPoint(x: x - 0.35, y: 0.5),
                         endPoint: UnitPoint(x: x + 0.35, y: 0.5)
                     )
-                    .mask(Text(text).font(font))
-                }
+                )
         }
     }
 }

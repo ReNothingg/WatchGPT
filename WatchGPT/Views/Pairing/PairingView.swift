@@ -119,10 +119,13 @@ private struct WaitingForApproval: View {
 }
 
 struct QRCodeView: View {
-    let text: String
+    private let qr: QRCode?
+
+    init(text: String) {
+        qr = QRCode.encode(text, ecc: .medium)
+    }
 
     var body: some View {
-        let qr = QRCode.encode(text, ecc: .medium)
         Canvas { context, size in
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
             guard let qr else { return }

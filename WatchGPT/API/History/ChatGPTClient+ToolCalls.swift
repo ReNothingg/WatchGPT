@@ -130,9 +130,10 @@ extension ChatGPTClient {
         }
     }
 
+    private static let recapRegex = try? NSRegularExpression(pattern: #"(\d+)\s*(h|ч|m|мин|s|с|сек)?"#, options: .caseInsensitive)
+
     static func seconds(fromRecap text: String) -> Int? {
-        let pattern = #"(\d+)\s*(h|ч|m|мин|s|с|сек)?"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+        guard let regex = recapRegex else { return nil }
         let range = NSRange(text.startIndex..., in: text)
         var total = 0
         var matched = false

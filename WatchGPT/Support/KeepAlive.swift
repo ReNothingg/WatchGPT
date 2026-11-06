@@ -1,25 +1,31 @@
-import WatchKit
+import Foundation
 
 @MainActor
-final class KeepAlive: NSObject, WKExtendedRuntimeSessionDelegate {
-    private var session: WKExtendedRuntimeSession?
-    private var wanted = false
+final class KeepAlive {
+    private var activity: DispatchSemaphore?
     private var releaseTask: Task<Void, Never>?
 
     func hold() {
         releaseTask?.cancel()
         releaseTask = nil
-        wanted = true
-        if let session, session.state != .invalid { return }
-        guard WKApplication.shared().applicationState == .active else { return }
-        let session = WKExtendedRuntimeSession()
-        session.delegate = self
-        self.session = session
-        session.start()
+        guard activity == nil else { return }
+        let semaphore = DispatchSemaphore(value: 0)
+        activity = semaphore
+        ProcessInfo.processInfo.performExpiringActivity(withReason: "Finishing WatchGPT answer") { [weak self] expired in
+            if expired {
+                semaphore.signal()
+                Task { @MainActor [weak self] in
+                    guard let self, self.activity === semaphore else { return }
+                    self.activity = nil
+                }
+            } else {
+                semaphore.wait()
+            }
+        }
     }
 
     func release(after delay: Duration) {
-        guard wanted else { return }
+        guard activity != nil else { return }
         releaseTask?.cancel()
         releaseTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
@@ -30,27 +36,7 @@ final class KeepAlive: NSObject, WKExtendedRuntimeSessionDelegate {
 
     private func stop() {
         releaseTask = nil
-        wanted = false
-        if session?.state == .running { session?.invalidate() }
-    }
-
-    nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
-        Task { @MainActor in
-            guard self.session === extendedRuntimeSession, !self.wanted else { return }
-            extendedRuntimeSession.invalidate()
-        }
-    }
-
-    nonisolated func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {}
-
-    nonisolated func extendedRuntimeSession(
-        _ extendedRuntimeSession: WKExtendedRuntimeSession,
-        didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason,
-        error: Error?
-    ) {
-        Task { @MainActor in
-            guard self.session === extendedRuntimeSession else { return }
-            self.session = nil
-        }
+        activity?.signal()
+        activity = nil
     }
 }

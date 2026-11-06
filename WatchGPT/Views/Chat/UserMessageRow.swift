@@ -10,6 +10,9 @@ struct UserMessageRow: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 3) {
+            if let images = message.images, !images.isEmpty {
+                AttachmentStrip(names: images)
+            }
             row
             if let versions = message.versions, versions.count > 1 {
                 VersionPager(message: message, count: versions.count)

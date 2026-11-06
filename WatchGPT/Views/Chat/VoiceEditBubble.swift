@@ -100,7 +100,7 @@ struct LiveBars: View {
     private static let count = 11
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: paused)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: paused)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let level = paused ? 0 : recorder.level
             Canvas { ctx, size in
@@ -127,7 +127,7 @@ struct LiveBorder: View {
     let active: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: !active)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let level = active ? recorder.level : 0
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -147,7 +147,7 @@ struct LiveBorder: View {
 
 struct ThinkingDots: View {
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 20)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             HStack(spacing: 3) {
                 ForEach(0..<3, id: \.self) { i in

@@ -25,6 +25,7 @@ enum ClientVersion {
     private static let fetchedKey = "codex.clientVersion.fetched"
     private static let manualKey = "codex.clientVersion.manual"
     private static let checkedKey = "codex.clientVersion.checkedAt"
+    private static let failedKey = "codex.clientVersion.failedAt"
     private static let latestURL = URL(string: "https://api.github.com/repos/openai/codex/releases/latest")!
 
     static let dailyInterval: TimeInterval = 24 * 3600
@@ -61,9 +62,14 @@ enum ClientVersion {
 
     static func refresh(minInterval: TimeInterval = dailyInterval) async -> CheckResult {
         if minInterval > 0, let last = lastCheck, Date.now.timeIntervalSince(last) < minInterval { return .skipped }
-        defaults.set(Date.now, forKey: checkedKey)
+        if minInterval > 0, let failed = defaults.object(forKey: failedKey) as? Date, Date.now.timeIntervalSince(failed) < errorInterval { return .skipped }
         let before = current
-        guard let latest = await fetchLatest() else { return .failed }
+        guard let latest = await fetchLatest() else {
+            defaults.set(Date.now, forKey: failedKey)
+            return .failed
+        }
+        defaults.removeObject(forKey: failedKey)
+        defaults.set(Date.now, forKey: checkedKey)
         if isNewer(latest, than: fetched ?? bundled) {
             defaults.set(latest, forKey: fetchedKey)
         }
@@ -74,11 +80,6 @@ enum ClientVersion {
         guard looksOutdated(error) else { return false }
         if case .updated = await refresh(minInterval: errorInterval) { return true }
         return false
-    }
-
-    static func reset() {
-        defaults.removeObject(forKey: fetchedKey)
-        defaults.removeObject(forKey: checkedKey)
     }
 
     static func looksOutdated(_ error: Error) -> Bool {

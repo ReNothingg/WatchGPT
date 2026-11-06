@@ -4,12 +4,17 @@ import WatchKit
 extension ChatStore {
     func send(_ raw: String) {
         didAutoResume = false
-        submit(raw)
+        submit(raw, images: canSubmit(raw) ? takePendingImages() : nil)
+    }
+
+    func canSubmit(_ raw: String) -> Bool {
+        !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isBusy && AIConsent.shared.isGranted(consentService)
     }
 
     func askFromSiri(_ raw: String) async throws -> String {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw SiriAskError.empty }
+        guard AIConsent.shared.isGranted(consentService) else { throw SiriAskError.noConsent }
         guard auth.isSignedIn else { throw SiriAskError.signedOut }
         guard !isBusy, voicePhase == .idle else { throw SiriAskError.busy }
 
@@ -34,13 +39,17 @@ extension ChatStore {
         submit(kind.label, refine: kind)
     }
 
-    var canRefine: Bool {
-        !isBusy && messages.last.map { $0.role == .assistant && !$0.isError && !$0.text.isEmpty } == true
+    var consentService: AIConsent.Service {
+        provider == .claude ? .anthropic : .openAI
     }
 
-    func submit(_ raw: String, refine: ChatMessage.Refinement? = nil, versions: [[ChatMessage]]? = nil, versionIndex: Int? = nil) {
+    var canRefine: Bool {
+        !isBusy && messages.last.map { $0.role == .assistant && !$0.isError && !$0.text.isEmpty && $0.text != Self.reportedPlaceholder } == true
+    }
+
+    func submit(_ raw: String, refine: ChatMessage.Refinement? = nil, versions: [[ChatMessage]]? = nil, versionIndex: Int? = nil, images: [String]? = nil) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isBusy else { return }
+        guard canSubmit(text) else { return }
         speaker.stop()
         interruptedInBackground = isInBackground
         resumeOnActive = false
@@ -49,11 +58,12 @@ extension ChatStore {
         var question = ChatMessage(role: .user, text: text, refine: refine)
         question.versions = versions
         question.versionIndex = versionIndex
+        question.images = images
         let reply = ChatMessage(role: .assistant, text: "", claude: provider == .claude ? true : nil)
         messages.append(question)
         messages.append(reply)
         widgetPending = WidgetPending(
-            question: Self.widgetText(refine?.label ?? text, limit: 80),
+            question: Self.widgetText((images == nil ? "" : "📷 ") + (refine?.label ?? text), limit: 80),
             preview: nil,
             startedAt: .now,
             chatID: conversationID
@@ -61,6 +71,7 @@ extension ChatStore {
         publishWidget()
         scrollTarget = question.id
         status = .thinking
+        defaults.set(conversationID, forKey: Keys.resumableChatID)
         WKInterfaceDevice.current().play(.start)
 
         sendTask = Task { [weak self] in
@@ -77,17 +88,19 @@ extension ChatStore {
         guard !isBusy, let lastUser = messages.lastIndex(where: { $0.role == .user }) else { return }
         let question = messages[lastUser]
         messages.removeSubrange(lastUser...)
-        submit(question.text, refine: question.refine, versions: question.versions, versionIndex: question.versionIndex)
+        submit(question.text, refine: question.refine, versions: question.versions, versionIndex: question.versionIndex, images: question.images)
     }
 
     func stop() {
         resumeOnActive = false
+        defaults.removeObject(forKey: Keys.resumableChatID)
         sendTask?.cancel()
         sendTask = nil
     }
 
     func sceneEnteredBackground() {
         isInBackground = true
+        flushChats()
         if isBusy { interruptedInBackground = true }
     }
 

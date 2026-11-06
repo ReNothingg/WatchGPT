@@ -60,12 +60,6 @@ struct Reasoning: Equatable, Sendable {
         a.isEmpty || b.isEmpty || a.hasPrefix(b) || b.hasPrefix(a)
     }
 
-    var services: [String] {
-        var names: [String] = []
-        for step in steps where step.icon != nil && !names.contains(step.title) { names.append(step.title) }
-        return names
-    }
-
     mutating func absorb(_ other: Reasoning) {
         for step in other.steps { add(title: step.title, detail: step.detail, icon: step.icon) }
         if let seconds = other.seconds { self.seconds = (self.seconds ?? 0) + seconds }

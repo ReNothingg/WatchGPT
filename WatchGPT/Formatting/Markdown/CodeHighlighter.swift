@@ -43,7 +43,26 @@ enum CodeHighlighter {
         "union", "primary", "key", "references", "index", "view", "asc", "desc", "count", "like", "between",
     ]
 
+    private final class Box {
+        let value: AttributedString
+        init(_ value: AttributedString) { self.value = value }
+    }
+
+    private static let cache: NSCache<NSString, Box> = {
+        let cache = NSCache<NSString, Box>()
+        cache.countLimit = 40
+        return cache
+    }()
+
     static func highlight(_ code: String, language: String) -> AttributedString {
+        let key = "\(language)|\(code)" as NSString
+        if let hit = cache.object(forKey: key) { return hit.value }
+        let value = render(code, language: language)
+        cache.setObject(Box(value), forKey: key)
+        return value
+    }
+
+    private static func render(_ code: String, language: String) -> AttributedString {
         let lang = language.lowercased()
         let hashComments = hashLanguages.contains(lang)
         let dashComments = dashLanguages.contains(lang)

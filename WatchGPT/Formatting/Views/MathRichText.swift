@@ -7,7 +7,7 @@ struct MathRichText: View {
     var live = false
 
     var body: some View {
-        let blocks = MathFormat.blocks(text).flatMap(Self.paragraphs)
+        let blocks = live ? Self.parse(text) : Self.cachedBlocks(text)
         if blocks.count == 1, case let .text(t) = blocks[0] {
             InlineMathText(text: t, fontSize: fontSize, font: font, cached: !live)
         } else {
@@ -33,6 +33,29 @@ struct MathRichText: View {
             }
             .contentShape(Rectangle())
         }
+    }
+
+    private final class BlocksBox {
+        let value: [MathFormat.Block]
+        init(_ value: [MathFormat.Block]) { self.value = value }
+    }
+
+    private static let blocksCache: NSCache<NSString, BlocksBox> = {
+        let cache = NSCache<NSString, BlocksBox>()
+        cache.countLimit = 80
+        return cache
+    }()
+
+    private static func parse(_ text: String) -> [MathFormat.Block] {
+        MathFormat.blocks(text).flatMap(paragraphs)
+    }
+
+    private static func cachedBlocks(_ text: String) -> [MathFormat.Block] {
+        let key = text as NSString
+        if let hit = blocksCache.object(forKey: key) { return hit.value }
+        let value = parse(text)
+        blocksCache.setObject(BlocksBox(value), forKey: key)
+        return value
     }
 
     private static func paragraphs(_ block: MathFormat.Block) -> [MathFormat.Block] {

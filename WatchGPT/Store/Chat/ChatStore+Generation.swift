@@ -14,6 +14,7 @@ extension ChatStore {
             if conversationID == chatID { saveConversation() }
             widgetPending = nil
             publishWidget()
+            if !resumeOnActive { defaults.removeObject(forKey: Keys.resumableChatID) }
             if resumeOnActive {
                 if !isInBackground {
                     Task { @MainActor [weak self] in self?.resumeInterrupted() }
@@ -24,6 +25,7 @@ extension ChatStore {
         }
 
         while true {
+            if Task.isCancelled { return }
             do {
                 let history = messages.filter { $0.id != replyID }
                 let stream: AsyncThrowingStream<ChatGPTClient.StreamEvent, Error>
@@ -47,6 +49,7 @@ extension ChatStore {
                     lastFlush = .now
                     shownLength += chunk.utf8.count
                     update(replyID) { $0.text += chunk }
+                    keepAlive.hold()
                     if widgetPending != nil, widgetPending?.preview == nil, shownLength > 80 {
                         widgetPending?.preview = Self.widgetText(text(of: replyID), limit: 120)
                         publishWidget()
@@ -62,6 +65,7 @@ extension ChatStore {
                         lastStreamActivity = .now
                         switch event {
                         case .waitingForNetwork:
+                            flush()
                             if siriRequest { throw URLError(.notConnectedToInternet) }
                             if status == .thinking { status = .waitingForNetwork }
                         case .responseStarted:
@@ -71,6 +75,7 @@ extension ChatStore {
                             pending += delta
                             if ContinuousClock.now - lastFlush >= interval { flush() }
                         case .searching:
+                            flush()
                             if status != .streaming && status != .searching { status = .searching }
                         case let .usage(snapshot):
                             applyUsage(snapshot)
@@ -99,10 +104,19 @@ extension ChatStore {
                 continue
             } catch ChatGPTClient.APIError.unauthorized where !didRetryAuth {
                 didRetryAuth = true
-                do { try await auth.refresh() } catch { fail(replyID, error); return }
+                do {
+                    try await auth.refresh()
+                } catch {
+                    if Task.isCancelled || GPTHistory.isCancellation(error) {
+                        if text(of: replyID).isEmpty { messages.removeAll { $0.id == replyID } }
+                        return
+                    }
+                    fail(replyID, error)
+                    return
+                }
                 continue
             } catch {
-                if Task.isCancelled || (error as? URLError)?.code == .cancelled || error is CancellationError {
+                if Task.isCancelled || GPTHistory.isCancellation(error) {
                     if text(of: replyID).isEmpty { messages.removeAll { $0.id == replyID } }
                     return
                 }

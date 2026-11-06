@@ -54,6 +54,7 @@ struct AskQuestionIntent: AppIntent {
 
 enum SiriAskError: Error, CustomLocalizedStringResourceConvertible {
     case signedOut
+    case noConsent
     case busy
     case empty
     case failed(String)
@@ -61,6 +62,7 @@ enum SiriAskError: Error, CustomLocalizedStringResourceConvertible {
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .signedOut: return "Сначала подключите ChatGPT в приложении WatchGPT."
+        case .noConsent: return "Сначала разрешите передачу вопросов ИИ-сервису в приложении WatchGPT."
         case .busy: return "WatchGPT сейчас занят другим ответом. Попробуйте чуть позже."
         case .empty: return "Не получилось расслышать вопрос."
         case let .failed(message): return "\(message)"

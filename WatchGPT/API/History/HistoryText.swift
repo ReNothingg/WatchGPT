@@ -17,9 +17,7 @@ enum HistoryText {
     }
 
     static func clean(_ text: String) -> String {
-        var s = text
-            .replacingOccurrences(of: "\u{E200}[^\u{E201}]*\u{E201}", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "【[^】]*】", with: "", options: .regularExpression)
+        var s = replace(citations, in: replace(entities, in: text, with: ""), with: "")
         s.unicodeScalars.removeAll { (0xE000...0xF8FF).contains($0.value) }
 
         var lines: [String] = []
@@ -34,10 +32,10 @@ enum HistoryText {
                 lines.append(trimmed.isEmpty || line.contains("`") ? line : "`\(line)`")
                 continue
             }
-            if trimmed.range(of: #"^([-*_]\s*){3,}$"#, options: .regularExpression) != nil { continue }
-            if trimmed.range(of: #"^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$"#, options: .regularExpression) != nil { continue }
-            if let heading = trimmed.range(of: #"^#{1,6}\s+"#, options: .regularExpression) {
-                let title = trimmed[heading.upperBound...].trimmingCharacters(in: .whitespaces)
+            if matches(rule, trimmed) || matches(tableSeparator, trimmed) { continue }
+            if let match = heading.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+               let range = Range(match.range, in: trimmed) {
+                let title = trimmed[range.upperBound...].trimmingCharacters(in: .whitespaces)
                 lines.append(title.isEmpty ? "" : "**\(title.replacingOccurrences(of: "**", with: ""))**")
                 continue
             }
@@ -49,13 +47,31 @@ enum HistoryText {
                 lines.append(cells.joined(separator: " · "))
                 continue
             }
-            lines.append(line.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression))
+            lines.append(String(line[..<(line.lastIndex { !$0.isWhitespace }.map(line.index(after:)) ?? line.startIndex)]))
         }
 
-        let joined = lines.joined(separator: "\n")
-            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        let joined = replace(blankRuns, in: lines.joined(separator: "\n"), with: "\n\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return clip(joined)
+    }
+
+    private static let entities = regex("\u{E200}[^\u{E201}]*\u{E201}")
+    private static let citations = regex("【[^】]*】")
+    private static let rule = regex(#"^([-*_]\s*){3,}$"#)
+    private static let tableSeparator = regex(#"^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$"#)
+    private static let heading = regex(#"^#{1,6}\s+"#)
+    private static let blankRuns = regex(#"\n{3,}"#)
+
+    private static func regex(_ pattern: String) -> NSRegularExpression {
+        try! NSRegularExpression(pattern: pattern)
+    }
+
+    private static func replace(_ regex: NSRegularExpression, in text: String, with template: String) -> String {
+        regex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: template)
+    }
+
+    private static func matches(_ regex: NSRegularExpression, _ text: String) -> Bool {
+        regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
     static func clip(_ text: String) -> String {

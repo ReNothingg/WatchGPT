@@ -62,8 +62,9 @@ extension ChatStore {
         chats.removeAll { $0.id == id }
         if !historyLoaded { deletedBeforeLoad.insert(id) }
         if widgetAnswer?.chatID == id { widgetAnswer = nil }
-        writeChats()
+        writeChats(immediately: true)
         publishWidget()
+        pruneAttachments()
     }
 
     func deleteAllChats() {
@@ -79,8 +80,10 @@ extension ChatStore {
             deletedBeforeLoad = []
             ChatArchive.saveAll([])
         }
-        writeChats()
+        writeChats(immediately: true)
         publishWidget()
+        let keep = Set(pendingImages)
+        Task.detached(priority: .utility) { Attachments.prune(keeping: keep) }
     }
 
     func handle(url: URL) {
@@ -133,6 +136,7 @@ extension ChatStore {
             ChatArchive.removeLegacy()
         }
         if let latest = chats.first { restore(latest) }
+        pruneAttachments()
     }
 
     func restore(_ latest: ChatThread) {
@@ -141,7 +145,8 @@ extension ChatStore {
         messages = latest.messages
         scrollTarget = messages.last(where: { $0.role == .user })?.id
         if let last = messages.last, last.role == .user, last.fromGPT != true,
-           Date.now.timeIntervalSince(last.date) <= 3600 {
+           Date.now.timeIntervalSince(last.date) <= 3600,
+           defaults.string(forKey: Keys.resumableChatID) == latest.id {
             resumeOnActive = true
         }
     }
@@ -165,6 +170,7 @@ extension ChatStore {
         clearedBeforeLoad = false
         chats = merged
         if merged != saved { writeChats() }
+        pruneAttachments()
         if let id = pendingOpenChatID {
             pendingOpenChatID = nil
             openFromLink(id)
@@ -192,9 +198,26 @@ extension ChatStore {
         writeChats()
     }
 
-    func writeChats() {
+    func writeChats(immediately: Bool = false) {
         ChatArchive.saveLatest(chats.first)
         guard historyLoaded else { return }
+        chatsSaveTask?.cancel()
+        chatsSaveTask = nil
+        guard !immediately else {
+            ChatArchive.saveAll(chats)
+            return
+        }
+        chatsSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.flushChats()
+        }
+    }
+
+    func flushChats() {
+        guard chatsSaveTask != nil else { return }
+        chatsSaveTask?.cancel()
+        chatsSaveTask = nil
         ChatArchive.saveAll(chats)
     }
 }

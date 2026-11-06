@@ -17,7 +17,19 @@ extension ChatStore {
         versions.append([])
         didAutoResume = false
         messages.removeSubrange(index...)
-        submit(text, versions: versions, versionIndex: versions.count - 1)
+        submit(text, versions: versions, versionIndex: versions.count - 1, images: head.images)
+    }
+
+    static let reportedPlaceholder = "Ответ скрыт по вашей жалобе."
+
+    func reportAnswer(_ id: UUID) {
+        guard !isBusy, let index = messages.firstIndex(where: { $0.id == id && $0.role == .assistant }) else { return }
+        speaker.stop()
+        if widgetAnswer?.answer == Self.widgetText(messages[index].text, limit: 300) { widgetAnswer = nil }
+        messages[index].text = Self.reportedPlaceholder
+        saveConversation()
+        publishWidget()
+        DiagnosticsLog.shared.record(.answer, message: "Пользователь пожаловался на ответ", detail: messages[index].claude == true ? "Claude" : "ChatGPT")
     }
 
     func switchVersion(_ id: UUID, by step: Int) {

@@ -186,12 +186,6 @@ final class AuthService {
         }
     }
 
-    func cancelPairing() {
-        pairingTask?.cancel()
-        pairingTask = nil
-        if tokens == nil { phase = .signedOut }
-    }
-
     func signOut() {
         pairingTask?.cancel()
         refreshTask?.cancel()
@@ -214,21 +208,27 @@ final class AuthService {
         guard let current = tokens else { throw AuthError.signedOut }
 
         let task = Task<AuthTokens, Error> {
-            try await OAuth.refresh(current)
+            do {
+                return try await OAuth.refresh(current)
+            } catch OAuth.RefreshFailure.permanent {
+                throw AuthError.signedOut
+            } catch OAuth.RefreshFailure.transient(let error) {
+                throw error
+            }
         }
         refreshTask = task
         defer { refreshTask = nil }
 
+        let updated: AuthTokens
         do {
-            let updated = try await task.value
-            store(updated)
-            return updated
-        } catch OAuth.RefreshFailure.permanent {
+            updated = try await task.value
+        } catch AuthError.signedOut {
             signOut()
             throw AuthError.signedOut
-        } catch OAuth.RefreshFailure.transient(let error) {
-            throw error
         }
+        guard tokens?.refreshToken == current.refreshToken else { throw AuthError.signedOut }
+        store(updated)
+        return updated
     }
 
     private func store(_ tokens: AuthTokens) {

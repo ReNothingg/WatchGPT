@@ -47,6 +47,7 @@ struct SettingsView: View {
                     ToggleTile(title: "Вслух", icon: "speaker.wave.2.fill", isOn: $store.autoSpeak)
                     ToggleTile(title: "На iPhone", icon: "iphone.and.arrow.forward", isOn: $store.handoff)
                 }
+                .glassGroup(spacing: 6)
 
                 AnswerFontCard(scale: $store.answerFontScale)
 
@@ -91,6 +92,11 @@ struct SettingsView: View {
                                 .foregroundStyle(Theme.secondaryText)
                                 .monospacedDigit()
                         }
+                    }
+                    .buttonStyle(.plain)
+                    CardDivider()
+                    NavigationLink(value: Route.privacy) {
+                        SettingsRow(title: "Конфиденциальность") { EmptyView() }
                     }
                     .buttonStyle(.plain)
                     CardDivider()

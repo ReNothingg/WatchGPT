@@ -36,10 +36,6 @@ final class PlaceRelevance: NSObject, CLLocationManagerDelegate {
 
     var isDenied: Bool { authorization == .denied || authorization == .restricted }
 
-    func sync() async {
-        await SmartPlaceStore.syncRelevance(places)
-    }
-
     func addCurrentPlace(name: String, radius: Double) async throws {
         isLocating = true
         defer { isLocating = false }
@@ -85,8 +81,7 @@ final class PlaceRelevance: NSObject, CLLocationManagerDelegate {
 
     private func persist() {
         SmartPlaceStore.save(places)
-        let snapshot = places
-        Task { await SmartPlaceStore.syncRelevance(snapshot) }
+        Task { await SmartPlaceStore.syncRelevanceIfNeeded() }
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

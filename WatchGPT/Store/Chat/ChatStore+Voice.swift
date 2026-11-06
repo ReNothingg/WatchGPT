@@ -18,7 +18,7 @@ extension ChatStore {
                 }
                 WKInterfaceDevice.current().play(.start)
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, !(error is CancellationError) else { return }
                 DiagnosticsLog.shared.record(.voice, error)
                 self.failVoice(Self.describe(error))
             }
@@ -28,11 +28,14 @@ extension ChatStore {
     func toggleVoicePause() {
         guard voicePhase == .recording else { return }
         if recorder.isPaused {
-            do {
-                try recorder.resume()
-                WKInterfaceDevice.current().play(.start)
-            } catch {
-                failVoice(Self.describe(error))
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.recorder.resume()
+                    WKInterfaceDevice.current().play(.start)
+                } catch {
+                    self.failVoice(Self.describe(error))
+                }
             }
         } else if recorder.isRecording {
             recorder.pause()
@@ -41,14 +44,21 @@ extension ChatStore {
     }
 
     func finishVoice() {
-        guard voicePhase == .recording else { return }
-        guard let url = recorder.stop() else {
-            failVoice("Слишком короткая запись. Нажмите и говорите.")
-            return
+        guard voicePhase == .recording, recorder.isActive, !isFinishingVoice else { return }
+        isFinishingVoice = true
+        voiceTask = Task { [weak self] in
+            guard let self else { return }
+            let url = await self.recorder.stop()
+            self.isFinishingVoice = false
+            guard !Task.isCancelled, self.voicePhase == .recording else { return }
+            guard let url else {
+                self.failVoice("Слишком короткая запись. Нажмите и говорите.")
+                return
+            }
+            WKInterfaceDevice.current().play(.click)
+            self.pendingRecording = url
+            self.transcribePending()
         }
-        WKInterfaceDevice.current().play(.click)
-        pendingRecording = url
-        transcribePending()
     }
 
     func retryTranscription() {
@@ -63,6 +73,7 @@ extension ChatStore {
         voiceCloseTask = nil
         voiceFailures = 0
         voiceGivingUp = false
+        isFinishingVoice = false
         if recorder.isActive { recorder.cancel() }
         pendingRecording = nil
         voicePrompt = nil
@@ -198,7 +209,11 @@ extension ChatStore {
         if let lastRecording { try? manager.removeItem(at: lastRecording) }
         try? manager.removeItem(at: copy)
         lastTranscript = nil
-        lastRecording = (try? manager.copyItem(at: file, to: copy)) != nil ? copy : nil
+        if (try? manager.linkItem(at: file, to: copy)) != nil {
+            lastRecording = copy
+        } else {
+            lastRecording = (try? manager.copyItem(at: file, to: copy)) != nil ? copy : nil
+        }
     }
 
     var voiceContext: String? {

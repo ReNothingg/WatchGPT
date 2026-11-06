@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+import PhotosUI
+import SwiftUI
 import WatchKit
 import WidgetKit
 
@@ -71,6 +73,12 @@ final class ChatStore {
     var editingMessageID: UUID?
     var codeHandoff: URL?
     @ObservationIgnored var codeHandoffTask: Task<Void, Never>?
+    var pendingImages: [String] = []
+    var loadingPhotos = false
+    var photoSelection: [PhotosPickerItem] = [] {
+        didSet { if photoSelection != oldValue { loadPhotos(photoSelection) } }
+    }
+    @ObservationIgnored var photoTask: Task<Void, Never>?
     @ObservationIgnored var widgetPending: WidgetPending?
     let usageHistory = UsageHistory()
 
@@ -127,6 +135,8 @@ final class ChatStore {
     @ObservationIgnored var clearedBeforeLoad = false
     @ObservationIgnored var pendingOpenChatID: String?
     @ObservationIgnored var widgetAnswer: WidgetAnswer?
+    @ObservationIgnored var chatsSaveTask: Task<Void, Never>?
+    @ObservationIgnored var isFinishingVoice = false
     let defaults = UserDefaults.standard
 
     init(auth: AuthService) {
@@ -136,7 +146,7 @@ final class ChatStore {
         selectedModelSlug = d.string(forKey: Keys.model) ?? ModelOption.fallback[0].slug
         gptEffort = d.string(forKey: Keys.effort) ?? "low"
         let savedProvider = d.string(forKey: Keys.provider).flatMap(Provider.init(rawValue:)) ?? .chatgpt
-        provider = savedProvider == .claude && !auth.hasClaudeKey ? .chatgpt : savedProvider
+        provider = savedProvider == .claude && (!auth.hasClaudeKey || !AIConsent.shared.isGranted(.anthropic)) ? .chatgpt : savedProvider
         claudeModelSlug = d.string(forKey: Keys.claudeModel) ?? ModelOption.claudeFallback[0].slug
         claudeEffort = d.string(forKey: Keys.claudeEffort) ?? "low"
         webSearch = d.object(forKey: Keys.webSearch) as? Bool ?? true

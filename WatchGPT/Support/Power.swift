@@ -72,8 +72,9 @@ struct LiveTimeline<Content: View>: View {
 
     private func rate(lowPower: Bool) -> Double {
         switch role {
-        case .decorative, .status: return min(fps, lowPower ? 10 : 20)
-        case .feedback: return min(fps, lowPower ? 15 : 30)
+        case .decorative: return min(fps, lowPower ? 8 : 15)
+        case .status: return min(fps, lowPower ? 8 : 20)
+        case .feedback: return min(fps, lowPower ? 12 : 20)
         }
     }
 }

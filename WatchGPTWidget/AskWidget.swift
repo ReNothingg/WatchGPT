@@ -7,6 +7,16 @@ struct AskEntry: TimelineEntry {
 
     var remaining: Double? { snapshot.usage?.tightest(at: date)?.remainingPercent(at: date) }
     var window: UsageWindow? { snapshot.usage?.tightest(at: date) }
+
+    static func timeline(for snapshot: WidgetSnapshot, now: Date = .now) -> Timeline<AskEntry> {
+        var dates = [now]
+        for window in [snapshot.usage?.primary, snapshot.usage?.secondary].compactMap({ $0 }) {
+            if let reset = window.resetAt, reset > now, reset < now.addingTimeInterval(8 * 24 * 3600) {
+                dates.append(reset.addingTimeInterval(1))
+            }
+        }
+        return Timeline(entries: dates.sorted().map { AskEntry(date: $0, snapshot: snapshot) }, policy: .never)
+    }
 }
 
 struct AskProvider: TimelineProvider {
@@ -20,16 +30,7 @@ struct AskProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AskEntry>) -> Void) {
-        let snapshot = SharedStore.load()
-        let now = Date.now
-        var dates = [now]
-        for window in [snapshot.usage?.primary, snapshot.usage?.secondary].compactMap({ $0 }) {
-            if let reset = window.resetAt, reset > now, reset < now.addingTimeInterval(8 * 24 * 3600) {
-                dates.append(reset.addingTimeInterval(1))
-            }
-        }
-        let entries = dates.sorted().map { AskEntry(date: $0, snapshot: snapshot) }
-        completion(Timeline(entries: entries, policy: .never))
+        completion(AskEntry.timeline(for: SharedStore.load()))
     }
 }
 
@@ -44,15 +45,7 @@ struct AskIntentProvider: AppIntentTimelineProvider {
     }
 
     func timeline(for configuration: AskWidgetIntent, in context: Context) async -> Timeline<AskEntry> {
-        let snapshot = SharedStore.load()
-        let now = Date.now
-        var dates = [now]
-        for window in [snapshot.usage?.primary, snapshot.usage?.secondary].compactMap({ $0 }) {
-            if let reset = window.resetAt, reset > now, reset < now.addingTimeInterval(8 * 24 * 3600) {
-                dates.append(reset.addingTimeInterval(1))
-            }
-        }
-        return Timeline(entries: dates.sorted().map { AskEntry(date: $0, snapshot: snapshot) }, policy: .never)
+        AskEntry.timeline(for: SharedStore.load())
     }
 
     func recommendations() -> [AppIntentRecommendation<AskWidgetIntent>] {

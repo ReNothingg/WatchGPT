@@ -161,19 +161,27 @@ struct AnthropicClient: Sendable {
     }
 
     static func body(messages: [ChatMessage], options: Options) -> [String: Any] {
-        var turns: [(role: String, texts: [String])] = []
+        var turns: [(role: String, blocks: [[String: Any]])] = []
         for message in messages where !message.isError && !message.text.isEmpty {
             let role = message.role == .user ? "user" : "assistant"
             if turns.isEmpty && role == "assistant" { continue }
+            var blocks: [[String: Any]] = []
+            if role == "user" {
+                for name in message.images ?? [] {
+                    guard let data = Attachments.base64(name) else { continue }
+                    blocks.append(["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": data]])
+                }
+            }
+            blocks.append(["type": "text", "text": message.modelText])
             if let last = turns.indices.last, turns[last].role == role {
-                turns[last].texts.append(message.modelText)
+                turns[last].blocks.append(contentsOf: blocks)
             } else {
-                turns.append((role, [message.modelText]))
+                turns.append((role, blocks))
             }
         }
 
         var payload: [[String: Any]] = turns.map { turn in
-            ["role": turn.role, "content": turn.texts.map { ["type": "text", "text": $0] }]
+            ["role": turn.role, "content": turn.blocks]
         }
         if let context = options.context, !context.isEmpty,
            let last = payload.indices.last, (payload[last]["role"] as? String) == "user",
@@ -285,18 +293,6 @@ struct AnthropicClient: Sendable {
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue(Self.apiVersion, forHTTPHeaderField: "anthropic-version")
         return request
-    }
-
-    private final class ConnectivityDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-        let onWaiting: @Sendable () -> Void
-
-        init(onWaiting: @escaping @Sendable () -> Void) {
-            self.onWaiting = onWaiting
-        }
-
-        func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
-            onWaiting()
-        }
     }
 
     static func error(status: Int, body: Data) -> APIError {

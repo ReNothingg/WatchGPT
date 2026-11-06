@@ -173,10 +173,18 @@ struct ChatGPTClient: Sendable {
         ]]
         for message in messages where !message.isError && !message.text.isEmpty {
             let isUser = message.role == .user
+            var content: [[String: Any]] = []
+            if isUser {
+                for name in message.images ?? [] {
+                    guard let data = Attachments.base64(name) else { continue }
+                    content.append(["type": "input_image", "image_url": "data:image/jpeg;base64,\(data)"])
+                }
+            }
+            content.append(["type": isUser ? "input_text" : "output_text", "text": message.modelText])
             input.append([
                 "type": "message",
                 "role": isUser ? "user" : "assistant",
-                "content": [["type": isUser ? "input_text" : "output_text", "text": message.modelText]],
+                "content": content,
             ])
         }
         if let context = options.context, !context.isEmpty {
@@ -213,7 +221,8 @@ struct ChatGPTClient: Sendable {
     }
 
     func fetchUsage() async throws -> UsageSnapshot {
-        let request = makeRequest(Self.baseURL.appending(path: "wham/usage"), method: "GET")
+        var request = makeRequest(Self.baseURL.appending(path: "wham/usage"), method: "GET")
+        request.timeoutInterval = 20
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw Self.error(status: status, body: data, response: response as? HTTPURLResponse) }
@@ -306,18 +315,6 @@ struct ChatGPTClient: Sendable {
         config.timeoutIntervalForResource = 3600
         return URLSession(configuration: config)
     }()
-
-    private final class ConnectivityDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-        let onWaiting: @Sendable () -> Void
-
-        init(onWaiting: @escaping @Sendable () -> Void) {
-            self.onWaiting = onWaiting
-        }
-
-        func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
-            onWaiting()
-        }
-    }
 
     func makeRequest(_ url: URL, method: String) -> URLRequest {
         var request = URLRequest(url: url)
@@ -413,5 +410,17 @@ struct ChatGPTClient: Sendable {
             return .http(403, "OpenAI не обслуживает ваш регион (403). Нужен DNS или VPN с поддерживаемой страной.")
         }
         return nil
+    }
+}
+
+final class ConnectivityDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let onWaiting: @Sendable () -> Void
+
+    init(onWaiting: @escaping @Sendable () -> Void) {
+        self.onWaiting = onWaiting
+    }
+
+    func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
+        onWaiting()
     }
 }

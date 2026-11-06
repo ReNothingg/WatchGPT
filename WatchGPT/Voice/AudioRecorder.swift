@@ -1,6 +1,31 @@
 import AVFoundation
 import Observation
 
+enum AudioSessionQueue {
+    private static let queue = DispatchQueue(label: "watchgpt.audio-session", qos: .userInitiated)
+
+    static func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { continuation.resume(with: Result { try work() }) }
+        }
+    }
+
+    static func async(_ work: @escaping @Sendable () -> Void) {
+        queue.async(execute: work)
+    }
+
+    static func deactivate() {
+        queue.async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+    }
+}
+
+private final class RecorderBox: @unchecked Sendable {
+    let recorder: AVAudioRecorder
+    init(_ recorder: AVAudioRecorder) { self.recorder = recorder }
+}
+
 @MainActor
 @Observable
 final class AudioRecorder {
@@ -29,6 +54,8 @@ final class AudioRecorder {
     @ObservationIgnored private var interruptionObserver: NSObjectProtocol?
     @ObservationIgnored private var isWhisper = false
     @ObservationIgnored private var recentLevels: [Float] = []
+    @ObservationIgnored private var isResuming = false
+    @ObservationIgnored private var startGeneration = 0
 
     private var fileURL: URL {
         FileManager.default.temporaryDirectory.appending(path: isWhisper ? "dictation.wav" : "dictation.m4a")
@@ -40,18 +67,26 @@ final class AudioRecorder {
         guard await Self.requestPermission() else { throw RecorderError.permissionDenied }
         try Task.checkCancellation()
         stopMetering()
-        recorder?.stop()
-
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.record, mode: whisper ? .measurement : .default, options: [])
-            try session.setActive(true)
-            try startRecording(whisper: whisper)
-        } catch {
-            recorder = nil
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
-            throw error
+        startGeneration += 1
+        let generation = startGeneration
+        let previous = recorder.map(RecorderBox.init)
+        recorder = nil
+        isWhisper = whisper
+        let url = fileURL
+        let box = try await AudioSessionQueue.run {
+            previous?.recorder.stop()
+            return try Self.makeRecorder(url: url, whisper: whisper)
         }
+        let superseded = generation != startGeneration
+        if Task.isCancelled || superseded {
+            AudioSessionQueue.async {
+                box.recorder.stop()
+                if !superseded { box.recorder.deleteRecording() }
+            }
+            if !superseded { AudioSessionQueue.deactivate() }
+            throw CancellationError()
+        }
+        recorder = box.recorder
 
         resetLevels()
         elapsed = 0
@@ -64,10 +99,24 @@ final class AudioRecorder {
         startMetering()
     }
 
-    private func startRecording(whisper: Bool) throws {
-        isWhisper = whisper
-        try? FileManager.default.removeItem(at: fileURL)
-        let settings: [String: Any] = whisper ? [
+    nonisolated private static func makeRecorder(url: URL, whisper: Bool) throws -> RecorderBox {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.record, mode: whisper ? .measurement : .default, options: [])
+            try session.setActive(true)
+            try? FileManager.default.removeItem(at: url)
+            let recorder = try AVAudioRecorder(url: url, settings: settings(whisper: whisper))
+            recorder.isMeteringEnabled = true
+            guard recorder.record() else { throw RecorderError.couldNotStart }
+            return RecorderBox(recorder)
+        } catch {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            throw error
+        }
+    }
+
+    nonisolated private static func settings(whisper: Bool) -> [String: Any] {
+        whisper ? [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
             AVSampleRateKey: 24_000,
             AVNumberOfChannelsKey: 1,
@@ -81,10 +130,6 @@ final class AudioRecorder {
             AVEncoderBitRateKey: 32_000,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
         ]
-        let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
-        recorder.isMeteringEnabled = true
-        guard recorder.record() else { throw RecorderError.couldNotStart }
-        self.recorder = recorder
     }
 
     private func resetLevels() {
@@ -98,28 +143,43 @@ final class AudioRecorder {
         markPaused()
     }
 
-    func resume() throws {
-        guard let recorder, isPaused else { return }
-        try AVAudioSession.sharedInstance().setActive(true)
-        guard recorder.record() else { throw RecorderError.couldNotStart }
+    func resume() async throws {
+        guard let recorder, isPaused, !isResuming else { return }
+        isResuming = true
+        defer { isResuming = false }
+        let box = RecorderBox(recorder)
+        try await AudioSessionQueue.run {
+            try AVAudioSession.sharedInstance().setActive(true)
+            guard box.recorder.record() else { throw RecorderError.couldNotStart }
+        }
+        guard self.recorder === recorder, isPaused else { return }
         resumedAt = .now
         isPaused = false
         isRecording = true
         startMetering()
     }
 
-    func stop() -> URL? {
+    func stop() async -> URL? {
         guard let recorder else { return nil }
         let duration = currentDuration
-        recorder.stop()
+        let url = fileURL
+        let box = RecorderBox(recorder)
         self.recorder = nil
-        finish()
-        return duration > 0.3 ? fileURL : nil
+        resetState()
+        _ = try? await AudioSessionQueue.run {
+            box.recorder.stop()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+        return duration > 0.3 ? url : nil
     }
 
     func cancel() {
-        recorder?.stop()
-        recorder?.deleteRecording()
+        if let box = recorder.map(RecorderBox.init) {
+            AudioSessionQueue.async {
+                box.recorder.stop()
+                box.recorder.deleteRecording()
+            }
+        }
         recorder = nil
         finish()
     }
@@ -139,6 +199,11 @@ final class AudioRecorder {
     }
 
     private func finish() {
+        resetState()
+        AudioSessionQueue.deactivate()
+    }
+
+    private func resetState() {
         isRecording = false
         isPaused = false
         stopMetering()
@@ -146,7 +211,6 @@ final class AudioRecorder {
             NotificationCenter.default.removeObserver(interruptionObserver)
             self.interruptionObserver = nil
         }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     private func observeInterruptions() {
@@ -167,7 +231,7 @@ final class AudioRecorder {
         meterTask = Task { [weak self] in
             while !Task.isCancelled {
                 self?.tick()
-                try? await Task.sleep(nanoseconds: 60_000_000)
+                try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
     }
@@ -347,25 +411,34 @@ final class RecordingPlayer: NSObject, AVAudioPlayerDelegate {
     private(set) var isPlaying = false
     @ObservationIgnored private var player: AVAudioPlayer?
 
+    @ObservationIgnored private var startToken: UUID?
+
     func toggle(_ url: URL) {
         if isPlaying {
             stop()
             return
         }
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .default, options: [])
-        try? session.setActive(true)
-        guard let player = try? AVAudioPlayer(contentsOf: url) else {
-            finished()
-            return
-        }
-        player.delegate = self
-        guard player.play() else {
-            finished()
-            return
-        }
-        self.player = player
+        let token = UUID()
+        startToken = token
         isPlaying = true
+        Task {
+            try? await AudioSessionQueue.run {
+                let session = AVAudioSession.sharedInstance()
+                try? session.setCategory(.playback, mode: .default, options: [])
+                try? session.setActive(true)
+            }
+            guard startToken == token, isPlaying else { return }
+            guard let player = try? AVAudioPlayer(contentsOf: url) else {
+                finished()
+                return
+            }
+            player.delegate = self
+            guard player.play() else {
+                finished()
+                return
+            }
+            self.player = player
+        }
     }
 
     func stop() {
@@ -379,8 +452,9 @@ final class RecordingPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     private func finished() {
+        startToken = nil
         player = nil
         isPlaying = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        AudioSessionQueue.deactivate()
     }
 }

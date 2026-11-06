@@ -45,12 +45,28 @@ enum SmartPlaceStore {
         SharedStore.defaults.set(data, forKey: key)
     }
 
-    static func syncRelevance(_ places: [SmartPlace]) async {
+    private static let syncedKey = "smartPlaces.syncedFingerprint"
+
+    static func syncRelevanceIfNeeded() async {
+        let places = load()
+        let fingerprint = (try? JSONEncoder().encode(places)) ?? Data()
+        guard SharedStore.defaults.data(forKey: syncedKey) != fingerprint else { return }
+        guard await syncRelevance(places) else { return }
+        SharedStore.defaults.set(fingerprint, forKey: syncedKey)
+    }
+
+    @discardableResult
+    static func syncRelevance(_ places: [SmartPlace]) async -> Bool {
         let intents = places.map { place in
             RelevantIntent(AskWidgetIntent(), widgetKind: SharedStore.askWidgetKind, relevance: .location(place.region))
         }
-        try? await RelevantIntentManager.shared.updateRelevantIntents(intents)
+        do {
+            try await RelevantIntentManager.shared.updateRelevantIntents(intents)
+        } catch {
+            return false
+        }
         WidgetCenter.shared.reloadTimelines(ofKind: SharedStore.askWidgetKind)
+        return true
     }
 }
 

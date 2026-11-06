@@ -128,7 +128,7 @@ extension ChatGPTClient {
             throw HistoryError.unreadable
         }
 
-        var request = url.host?.hasSuffix("chatgpt.com") == true ? makeRequest(url, method: "GET") : URLRequest(url: url)
+        var request = (url.host == "chatgpt.com" || url.host?.hasSuffix(".chatgpt.com") == true) == true ? makeRequest(url, method: "GET") : URLRequest(url: url)
         request.timeoutInterval = 40
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0

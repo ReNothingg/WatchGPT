@@ -35,27 +35,3 @@ struct UsageRing: View {
         return number + Text("%").font(.system(size: textSize * 0.7, weight: .semibold, design: .rounded))
     }
 }
-
-struct UsageLine: View {
-    let usage: UsageSnapshot?
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            HStack(spacing: 10) {
-                if let usage, usage.primary != nil || usage.secondary != nil {
-                    ForEach(Array([usage.primary, usage.secondary].compactMap { $0 }.enumerated()), id: \.offset) { _, window in
-                        let left = window.remainingPercent(at: context.date)
-                        HStack(spacing: 3) {
-                            Circle().fill(Theme.usageColor(left)).frame(width: 6, height: 6)
-                            Text(Theme.percent(left)).monospacedDigit()
-                            Text(window.shortLabel).foregroundStyle(.secondary)
-                        }
-                    }
-                } else {
-                    Text("Лимиты загружаются…").foregroundStyle(.secondary)
-                }
-            }
-            .font(.caption2)
-        }
-    }
-}

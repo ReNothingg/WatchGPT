@@ -64,9 +64,19 @@ private extension ChatStore {
 
 private struct LiveGlow: View {
     @Environment(ChatStore.self) private var store
+    @State private var ready = false
 
     var body: some View {
-        EdgeGlow(mode: store.voiceMode) { [recorder = store.recorder] in recorder.level }
+        ZStack {
+            if ready {
+                EdgeGlow(mode: store.voiceMode) { [recorder = store.recorder] in recorder.level }
+                    .transition(.opacity)
+            }
+        }
+        .task {
+            try? await Task.sleep(for: .milliseconds(450))
+            withAnimation(.easeOut(duration: 0.3)) { ready = true }
+        }
     }
 }
 

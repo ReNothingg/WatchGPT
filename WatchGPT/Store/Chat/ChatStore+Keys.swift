@@ -23,5 +23,6 @@ extension ChatStore {
         static let claudeEffort = "settings.claudeEffort"
         static let claudeModels = "cache.claudeModels"
         static let claudeModelsFetchedAt = "cache.claudeModelsFetchedAt"
+        static let resumableChatID = "state.resumableChatID"
     }
 }

@@ -73,7 +73,7 @@ struct InlineMathRenderer {
             let font = Font.system(size: fs, design: .serif)
             var out = AttributedString()
             switch kind {
-            case let .matrix(l, r): out += piece(l.isEmpty ? "(" : l, font: font, offset: offset)
+            case let .matrix(l, _): out += piece(l.isEmpty ? "(" : l, font: font, offset: offset)
             case .cases: out += piece("{ ", font: font, offset: offset)
             case .aligned: break
             }

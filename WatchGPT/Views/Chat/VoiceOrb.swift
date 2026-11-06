@@ -9,7 +9,7 @@ struct VoiceBlob: View {
     @State private var engine = BlobEngine()
 
     var body: some View {
-        LiveTimeline(role: .feedback) { date in
+        LiveTimeline(role: .feedback, fps: mode == .paused ? 8 : 20) { date in
             let state = engine.step(to: date, level: level(), mode: mode)
             let ratio = coreRatio
             Canvas(rendersAsynchronously: true) { ctx, size in
@@ -248,7 +248,7 @@ struct EdgeGlow: View {
     @State private var engine = GlowEngine()
 
     var body: some View {
-        LiveTimeline(role: .feedback, fps: 20) { date in
+        LiveTimeline(role: .feedback, fps: mode == .paused ? 8 : 15) { date in
             let state = engine.step(to: date, level: level(), mode: mode)
             Canvas(rendersAsynchronously: true) { ctx, size in
                 GlowPainter(state: state).draw(in: &ctx, size: size)
@@ -320,11 +320,17 @@ private struct GlowPainter {
         let outer = Path(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerRadius: corner, style: .continuous)
 
         ctx.drawLayer { layer in
-            layer.addFilter(.blur(radius: 9 + 9 * e))
-            layer.opacity = 0.25 + 0.75 * e
+            let strength = 0.25 + 0.75 * e
+            let shadingA = GraphicsContext.Shading.conicGradient(colorsA, center: center, angle: .radians(state.angleA))
+            let shadingB = GraphicsContext.Shading.conicGradient(colorsB, center: center, angle: .radians(state.angleB))
             layer.blendMode = .plusLighter
-            layer.stroke(outer, with: .conicGradient(colorsA, center: center, angle: .radians(state.angleA)), lineWidth: 8 + 22 * e)
-            layer.stroke(outer, with: .conicGradient(colorsB, center: center, angle: .radians(state.angleB)), lineWidth: 6 + 16 * e)
+            layer.opacity = strength * 0.2
+            layer.stroke(outer, with: shadingA, lineWidth: 26 + 34 * e)
+            layer.opacity = strength * 0.35
+            layer.stroke(outer, with: shadingA, lineWidth: 14 + 20 * e)
+            layer.stroke(outer, with: shadingB, lineWidth: 10 + 14 * e)
+            layer.opacity = strength * 0.6
+            layer.stroke(outer, with: shadingB, lineWidth: 5 + 7 * e)
         }
 
         ctx.drawLayer { layer in

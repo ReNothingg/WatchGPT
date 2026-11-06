@@ -3,6 +3,9 @@ import SwiftUI
 struct ChatView: View {
     @Environment(ChatStore.self) private var store
     @State private var chromeVisible = true
+    @State private var visibleLimit = Self.pageSize
+
+    private static let pageSize = 16
 
     var body: some View {
         Group {
@@ -13,7 +16,10 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(store.messages) { message in
+                            if store.messages.count > visibleLimit {
+                                EarlierButton { visibleLimit += Self.pageSize }
+                            }
+                            ForEach(store.messages.suffix(visibleLimit)) { message in
                                 MessageRow(message: message, isLast: message.id == store.messages.last?.id, fontScale: store.answerFontScale)
                                     .equatable()
                                     .id(message.id)
@@ -26,10 +32,17 @@ struct ChatView: View {
                     .autoHidesChrome($chromeVisible)
                     .onChange(of: store.scrollTarget) { _, target in
                         guard let target else { return }
+                        reveal(target)
                         withAnimation { proxy.scrollTo(target, anchor: .top) }
                     }
+                    .onChange(of: store.conversationID) { _, _ in
+                        visibleLimit = Self.pageSize
+                    }
                     .onAppear {
-                        if let target = store.scrollTarget { proxy.scrollTo(target, anchor: .top) }
+                        if let target = store.scrollTarget {
+                            reveal(target)
+                            proxy.scrollTo(target, anchor: .top)
+                        }
                     }
                 }
                 .transition(.opacity)
@@ -38,19 +51,11 @@ struct ChatView: View {
         .animation(.smooth(duration: 0.4), value: store.messages.isEmpty)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                NavigationLink(value: Route.usage) {
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        UsageRing(
-                            remaining: store.usage?.tightest(at: context.date)?.remainingPercent(at: context.date),
-                            lineWidth: 2.5,
-                            textSize: 10,
-                            showsPercentSign: true
-                        )
+                NavigationLink(value: Route.settings) {
+                    Image(systemName: "gearshape")
                         .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                    }
                 }
-                .accessibilityLabel(limitsLabel)
+                .accessibilityLabel("Настройки")
             }
             if store.messages.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -73,8 +78,13 @@ struct ChatView: View {
                     .accessibilityLabel("Новый чат")
                 }
                 ToolbarItem(placement: .bottomBar) {
-                    AskButton(size: 46)
-                        .chromeVisibility(chromeVisible || store.isBusy)
+                    HStack(spacing: 14) {
+                        PhotoAttachButton(size: 32)
+                            .opacity(store.isBusy ? 0 : 1)
+                        AskButton(size: 52, showsUsage: true)
+                        Color.clear.frame(width: 32, height: 32)
+                    }
+                    .chromeVisibility(chromeVisible || store.isBusy || !store.pendingImages.isEmpty)
                 }
             }
         }
@@ -91,6 +101,7 @@ struct ChatView: View {
             case .quickPrompts: QuickPromptsView()
             case .claude: ClaudeSettingsView()
             case .places: PlacesView()
+            case .privacy: PrivacyView()
             case let .gptChat(id, title): GPTChatView(chatID: id, title: title)
             }
         }
@@ -111,9 +122,10 @@ struct ChatView: View {
         }
     }
 
-    private var limitsLabel: String {
-        guard let left = store.usage?.tightest()?.remainingPercent() else { return "Лимиты" }
-        return "Лимиты, осталось \(Theme.percent(left))"
+    private func reveal(_ id: UUID) {
+        guard let index = store.messages.firstIndex(where: { $0.id == id }) else { return }
+        let needed = store.messages.count - index
+        if needed > visibleLimit { visibleLimit = needed }
     }
 
     private func openDictationFromWidget() {
@@ -127,5 +139,27 @@ struct ChatView: View {
                 Dictation.present { store.send($0) }
             }
         }
+    }
+}
+
+private struct EarlierButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Ранние сообщения")
+                    .font(.caption2.weight(.medium))
+            }
+            .foregroundStyle(Theme.secondaryText)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .glassBackground(Capsule(), interactive: true)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
     }
 }

@@ -14,4 +14,13 @@ extension View {
             background(shape.fill(fill))
         }
     }
+
+    @ViewBuilder
+    func glassGroup(spacing: CGFloat? = nil) -> some View {
+        if #available(watchOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) { self }
+        } else {
+            self
+        }
+    }
 }

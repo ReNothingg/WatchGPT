@@ -47,8 +47,13 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     var claude: Bool?
     var versions: [[ChatMessage]]?
     var versionIndex: Int?
+    var images: [String]?
 
     var modelText: String { refine?.prompt ?? text }
+
+    var allImages: [String] {
+        (images ?? []) + (versions ?? []).flatMap { $0.flatMap(\.allImages) }
+    }
 }
 
 enum Provider: String, Codable, CaseIterable, Sendable {

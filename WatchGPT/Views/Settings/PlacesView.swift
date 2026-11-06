@@ -6,7 +6,6 @@ struct PlacesView: View {
     @State private var name = ""
     @State private var radius = SmartPlaceStore.defaultRadius
     @State private var errorText: String?
-    @State private var pendingDelete: SmartPlace?
 
     var body: some View {
         List {

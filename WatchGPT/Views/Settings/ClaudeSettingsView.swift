@@ -6,8 +6,17 @@ struct ClaudeSettingsView: View {
     @Environment(AuthService.self) private var auth
     @State private var keyDraft = ""
     @State private var confirmDelete = false
+    @State private var consent = AIConsent.shared
 
     var body: some View {
+        if consent.isGranted(.anthropic) {
+            settings
+        } else {
+            ConsentView(service: .anthropic) {}
+        }
+    }
+
+    private var settings: some View {
         List {
             Section {
                 Toggle("Отвечает Claude", isOn: claudeMode)

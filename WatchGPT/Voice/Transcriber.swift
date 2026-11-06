@@ -260,10 +260,8 @@ struct MultipartForm {
         body.append(Data("\r\n".utf8))
     }
 
-    func finalize() -> Data {
-        var result = body
-        result.append(Data("--\(boundary)--\r\n".utf8))
-        return result
+    mutating func finalize() {
+        body.append(Data("--\(boundary)--\r\n".utf8))
     }
 
     struct Built: Sendable {
@@ -275,7 +273,8 @@ struct MultipartForm {
         await Task.detached(priority: .userInitiated) {
             var form = MultipartForm()
             fill(&form)
-            return Built(body: form.finalize(), contentType: form.contentType)
+            form.finalize()
+            return Built(body: form.body, contentType: form.contentType)
         }.value
     }
 }

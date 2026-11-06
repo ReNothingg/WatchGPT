@@ -2,7 +2,7 @@ import Foundation
 import WatchKit
 
 extension ChatStore {
-    static let usageMaxAge: TimeInterval = 120
+    static let usageMaxAge: TimeInterval = 300
     static let modelsMaxAge: TimeInterval = 6 * 3600
 
     func refreshMeta(force: Bool = false) async {

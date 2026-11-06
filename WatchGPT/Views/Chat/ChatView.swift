@@ -1,4 +1,5 @@
 import SwiftUI
+import WatchKit
 
 struct ChatView: View {
     @Environment(ChatStore.self) private var store
@@ -79,10 +80,17 @@ struct ChatView: View {
                 }
                 ToolbarItem(placement: .bottomBar) {
                     HStack(spacing: 14) {
-                        PhotoAttachButton(size: 32)
-                            .opacity(store.isBusy ? 0 : 1)
+                        if photoOnRight {
+                            Color.clear.frame(width: 32, height: 32)
+                        } else {
+                            photoButton
+                        }
                         AskButton(size: 52, showsUsage: true)
-                        Color.clear.frame(width: 32, height: 32)
+                        if photoOnRight {
+                            photoButton
+                        } else {
+                            Color.clear.frame(width: 32, height: 32)
+                        }
                     }
                     .chromeVisibility(chromeVisible || store.isBusy || !store.pendingImages.isEmpty)
                 }
@@ -120,6 +128,15 @@ struct ChatView: View {
         .onAppear {
             if store.pendingAsk { openDictationFromWidget() }
         }
+    }
+
+    private var photoOnRight: Bool {
+        WKInterfaceDevice.current().wristLocation == .left
+    }
+
+    private var photoButton: some View {
+        PhotoAttachButton(size: 32)
+            .opacity(store.isBusy ? 0 : 1)
     }
 
     private func reveal(_ id: UUID) {

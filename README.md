@@ -219,39 +219,6 @@ Handoff должен быть включён: на iPhone *Настройки �
 | «Нет сети» | Часам нужна связь через iPhone, Wi-Fi или LTE; вопрос отправится, когда она появится |
 | «ChatGPT не открыл историю (401/403)» | OpenAI не пускает токен Codex к истории. Остальное работает; повтор — через 10 минут или кнопкой |
 
-## Для разработчиков
-
-```
-WatchGPT/         приложение для часов
-  App/            точка входа, корневой экран, Siri и App Shortcuts
-  Auth/           вход по коду устройства, токены, Keychain
-  API/            клиенты ChatGPT и Claude: стриминг, лимиты, модели
-    History/      история chatgpt.com: запросы, разбор переписки и инструментов
-  Store/          быстрые вопросы, лимиты, история ChatGPT
-    Chat/         ChatStore по частям: голос, отправка, генерация, чаты, виджет
-  Formatting/     ответы: Markdown, код, таблицы и формулы
-    Markdown/     разбор блоков и подсветка кода
-    Math/         парсер LaTeX, отрисовка и текстовая версия формул
-    Views/        блоки ответа: код, таблица, список, цитата, формула
-  Views/          экраны по разделам
-    Chat/         чат, сообщения, правка, запись в пузыре
-    History/      история и просмотр чатов ChatGPT
-    Settings/     настройки, голос, Claude, диагностика
-    Models/       выбор модели и уровня рассуждений
-    Usage/        лимиты
-    Components/   общие элементы интерфейса
-  Voice/          запись и распознавание речи
-  Support/        озвучка, Handoff, диагностика, энергосбережение
-WatchGPTWidget/   виджет и кнопка Пункта управления
-Shared/           общее для приложения и виджета
-Design/           иконка и картинки для README
-project.yml       описание проекта для XcodeGen
-```
-
-`WatchGPT.xcodeproj` уже сгенерирован. После правок `project.yml`:
-`brew install xcodegen && xcodegen generate`. Каждый push и PR собирается в
-[GitHub Actions](https://github.com/ReNothingg/WatchGPT/actions/workflows/build.yml).
-
 ## Лицензия
 
 [MIT](LICENSE) © ReNothingg

@@ -39,7 +39,7 @@ struct ModelCard: View {
                             .minimumScaleFactor(0.6)
                             .contentTransition(.numericText())
                         HStack(spacing: 2) {
-                            Text(hasEfforts ? model.displayName : "Сменить модель")
+                            Text(hasEfforts ? model.displayName : String(localized: "Сменить модель"))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                             Image(systemName: "chevron.right")

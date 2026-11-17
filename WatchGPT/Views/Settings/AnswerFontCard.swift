@@ -24,7 +24,7 @@ struct AnswerFontCard: View {
                 withAnimation(.snappy(duration: 0.2)) { scale = 1 }
                 WKHaptics.click()
             }
-            MarkdownText(text: "Так будет выглядеть ответ.", scale: scale)
+            MarkdownText(text: String(localized: "Так будет выглядеть ответ."), scale: scale)
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .minimumScaleFactor(0.5)
@@ -51,7 +51,7 @@ struct FontScaleSlider: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            stepButton(icon: "textformat.size.smaller", label: "Уменьшить шрифт", delta: -step)
+            stepButton(icon: "textformat.size.smaller", label: String(localized: "Уменьшить шрифт"), delta: -step)
             GeometryReader { geo in
                 let width = geo.size.width
                 ZStack(alignment: .leading) {
@@ -78,7 +78,7 @@ struct FontScaleSlider: View {
                 )
             }
             .frame(height: 32)
-            stepButton(icon: "textformat.size.larger", label: "Увеличить шрифт", delta: step)
+            stepButton(icon: "textformat.size.larger", label: String(localized: "Увеличить шрифт"), delta: step)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Шрифт ответа")

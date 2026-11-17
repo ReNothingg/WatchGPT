@@ -5,7 +5,7 @@ struct ReasoningSummary: View {
     @State private var expanded = false
 
     private var label: String {
-        if let seconds = reasoning.seconds { return "Думал \(ReasoningFormat.duration(seconds))" }
+        if let seconds = reasoning.seconds { return String(localized: "Думал \(ReasoningFormat.duration(seconds))") }
         let tools = reasoning.steps.filter { $0.icon != nil }
         if !tools.isEmpty, tools.count == reasoning.steps.count {
             var names: [String] = []
@@ -13,9 +13,9 @@ struct ReasoningSummary: View {
                 let name = step.title.components(separatedBy: ":").first ?? step.title
                 if !names.contains(name) { names.append(name) }
             }
-            return tools.count == 1 ? tools[0].title : "Использовано: " + names.prefix(2).joined(separator: ", ")
+            return tools.count == 1 ? tools[0].title : String(localized: "Использовано: \(names.prefix(2).joined(separator: ", "))")
         }
-        return "Рассуждения"
+        return String(localized: "Рассуждения")
     }
 
     var body: some View {
@@ -160,20 +160,16 @@ enum ReasoningPalette {
 
 enum ReasoningFormat {
     static func duration(_ seconds: Int) -> String {
-        if seconds < 60 { return "\(max(1, seconds)) с" }
+        if seconds < 60 { return String(localized: "\(max(1, seconds)) с") }
         if seconds < 3600 {
             let rest = seconds % 60
-            return rest == 0 ? "\(seconds / 60) мин" : "\(seconds / 60) мин \(rest) с"
+            return rest == 0 ? String(localized: "\(seconds / 60) мин") : String(localized: "\(seconds / 60) мин \(rest) с")
         }
         let minutes = (seconds % 3600) / 60
-        return minutes == 0 ? "\(seconds / 3600) ч" : "\(seconds / 3600) ч \(minutes) мин"
+        return minutes == 0 ? String(localized: "\(seconds / 3600) ч") : String(localized: "\(seconds / 3600) ч \(minutes) мин")
     }
 
     static func steps(_ count: Int) -> String {
-        let mod10 = count % 10
-        let mod100 = count % 100
-        if mod10 == 1 && mod100 != 11 { return "\(count) шаг" }
-        if (2...4).contains(mod10) && !(12...14).contains(mod100) { return "\(count) шага" }
-        return "\(count) шагов"
+        String(localized: "\(count) шагов")
     }
 }

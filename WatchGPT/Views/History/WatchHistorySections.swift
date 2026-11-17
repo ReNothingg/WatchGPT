@@ -25,7 +25,7 @@ struct WatchHistorySections: View {
                             .modifier(Entrance(index: index + 1, appeared: appeared))
                     }
                 } header: {
-                    SectionTitle(text: "Ранее")
+                    SectionTitle(text: String(localized: "Ранее"))
                 }
             }
 
@@ -39,7 +39,7 @@ struct WatchHistorySections: View {
             }
         } else {
             Section {
-                EmptyHistory(icon: "bubble.left.and.bubble.right", title: "Пока пусто", subtitle: "Здесь появятся разговоры с часов")
+                EmptyHistory(icon: "bubble.left.and.bubble.right", title: String(localized: "Пока пусто"), subtitle: String(localized: "Здесь появятся разговоры с часов"))
                     .listRowBackground(Color.clear)
             }
         }

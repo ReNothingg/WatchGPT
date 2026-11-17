@@ -73,7 +73,7 @@ struct PrivacyView: View {
         }
         .navigationTitle("Конфиденциальность")
         .confirmationDialog(
-            pendingRevoke.map { "Запретить передачу данных в \($0.company)?" } ?? "",
+            pendingRevoke.map { String(localized: "Запретить передачу данных в \($0.company)?") } ?? "",
             isPresented: Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } })
         ) {
             Button("Запретить", role: .destructive) {

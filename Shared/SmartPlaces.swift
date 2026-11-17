@@ -24,14 +24,6 @@ enum SmartPlaceStore {
     static let radiusOptions: [Double] = [100, 150, 250, 500]
     static let defaultRadius: Double = 150
 
-    static func noun(_ count: Int) -> String {
-        let mod100 = count % 100, mod10 = count % 10
-        if (11...14).contains(mod100) { return "мест" }
-        if mod10 == 1 { return "место" }
-        if (2...4).contains(mod10) { return "места" }
-        return "мест"
-    }
-
     static func load() -> [SmartPlace] {
         guard let data = SharedStore.defaults.data(forKey: key),
               let places = try? JSONDecoder().decode([SmartPlace].self, from: data) else {

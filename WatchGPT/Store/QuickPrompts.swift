@@ -14,10 +14,10 @@ struct QuickPrompt: Codable, Identifiable, Equatable, Hashable, Sendable {
     }
 
     static let defaults: [QuickPrompt] = [
-        QuickPrompt(text: "Переведи на английский", asksVoice: true),
-        QuickPrompt(text: "Объясни простыми словами", asksVoice: true),
-        QuickPrompt(text: "Посчитай", asksVoice: true),
-        QuickPrompt(text: "Главные новости сегодня", asksVoice: false),
+        QuickPrompt(text: String(localized: "Переведи на английский"), asksVoice: true),
+        QuickPrompt(text: String(localized: "Объясни простыми словами"), asksVoice: true),
+        QuickPrompt(text: String(localized: "Посчитай"), asksVoice: true),
+        QuickPrompt(text: String(localized: "Главные новости сегодня"), asksVoice: false),
     ]
 
     static let limit = 12

@@ -36,6 +36,7 @@ targets:
       path: WatchGPT/Info.plist
       properties:
         CFBundleDisplayName: WatchGPT
+        CFBundleDevelopmentRegion: en
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
@@ -74,6 +75,7 @@ targets:
       path: WatchGPTWidget/Info.plist
       properties:
         CFBundleDisplayName: WatchGPT
+        CFBundleDevelopmentRegion: en
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         AppGroupID: $(APP_GROUP)

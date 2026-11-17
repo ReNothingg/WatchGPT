@@ -38,7 +38,7 @@ struct QuickPromptsView: View {
                                 Label("Удалить", systemImage: "trash")
                             }
                         }
-                        .accessibilityLabel(prompt.asksVoice ? "\(prompt.text), затем продиктовать" : prompt.text)
+                        .accessibilityLabel(prompt.asksVoice ? String(localized: "\(prompt.text), затем продиктовать") : prompt.text)
                     }
                     .onMove { store.quickPrompts.move(fromOffsets: $0, toOffset: $1) }
                 }

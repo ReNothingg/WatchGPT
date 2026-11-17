@@ -105,7 +105,7 @@ struct AskWidgetView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if !entry.snapshot.signedIn {
                     StatLine(value: "ChatGPT", unit: nil, color: RingPalette.mint)
-                    StatLine(value: "Войдите", unit: nil, color: RingPalette.cyan)
+                    StatLine(value: String(localized: "Войдите"), unit: nil, color: RingPalette.cyan)
                 } else if usage?.primary == nil && usage?.secondary == nil {
                     StatLine(value: "ChatGPT", unit: nil, color: RingPalette.mint)
                 } else {

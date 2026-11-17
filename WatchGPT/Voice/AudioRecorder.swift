@@ -35,8 +35,8 @@ final class AudioRecorder {
 
         var errorDescription: String? {
             switch self {
-            case .permissionDenied: return "Нет доступа к микрофону. Разрешите его в настройках часов: Конфиденциальность → Микрофон."
-            case .couldNotStart: return "Не удалось включить микрофон."
+            case .permissionDenied: return String(localized: "Нет доступа к микрофону. Разрешите его в настройках часов: Конфиденциальность → Микрофон.")
+            case .couldNotStart: return String(localized: "Не удалось включить микрофон.")
             }
         }
     }

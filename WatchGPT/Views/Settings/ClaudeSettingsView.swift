@@ -101,7 +101,7 @@ struct ClaudeSettingsView: View {
     }
 
     private var keyStatus: String {
-        guard let key = auth.claudeKey else { return "нет" }
-        return key.isManual ? "свой" : "из аккаунта"
+        guard let key = auth.claudeKey else { return String(localized: "нет") }
+        return key.isManual ? String(localized: "свой") : String(localized: "из аккаунта")
     }
 }

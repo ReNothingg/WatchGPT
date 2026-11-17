@@ -35,14 +35,14 @@ final class AIConsent {
             switch self {
             case .openAI:
                 return [
-                    "текст ваших вопросов и предыдущие сообщения открытого чата",
-                    "записи голоса, если для распознавания выбран ChatGPT или OpenAI",
-                    "токен входа в ваш аккаунт ChatGPT",
+                    String(localized: "текст ваших вопросов и предыдущие сообщения открытого чата"),
+                    String(localized: "записи голоса, если для распознавания выбран ChatGPT или OpenAI"),
+                    String(localized: "токен входа в ваш аккаунт ChatGPT"),
                 ]
             case .anthropic:
                 return [
-                    "текст ваших вопросов и предыдущие сообщения открытого чата",
-                    "ваш API-ключ Anthropic",
+                    String(localized: "текст ваших вопросов и предыдущие сообщения открытого чата"),
+                    String(localized: "ваш API-ключ Anthropic"),
                 ]
             }
         }

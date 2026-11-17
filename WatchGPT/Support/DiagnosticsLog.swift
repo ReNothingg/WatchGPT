@@ -12,6 +12,16 @@ final class DiagnosticsLog {
         case models = "Модели"
         case voice = "Голос"
         case check = "Проверка"
+
+        var title: String {
+            switch self {
+            case .answer: return String(localized: "Ответ")
+            case .usage: return String(localized: "Лимиты")
+            case .models: return String(localized: "Модели")
+            case .voice: return String(localized: "Голос")
+            case .check: return String(localized: "Проверка")
+            }
+        }
     }
 
     struct Entry: Codable, Identifiable, Equatable {

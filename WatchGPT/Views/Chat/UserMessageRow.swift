@@ -64,13 +64,13 @@ struct VersionPager: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            arrow("chevron.left", step: -1, label: "Предыдущая версия", available: canMove(-1))
+            arrow("chevron.left", step: -1, label: String(localized: "Предыдущая версия"), available: canMove(-1))
             Text("\(index + 1)/\(count)")
                 .font(.system(size: 12, weight: .semibold).monospacedDigit())
                 .foregroundStyle(Theme.secondaryText)
                 .contentTransition(.numericText(value: Double(index)))
                 .frame(minWidth: 26)
-            arrow("chevron.right", step: 1, label: "Следующая версия", available: canMove(1))
+            arrow("chevron.right", step: 1, label: String(localized: "Следующая версия"), available: canMove(1))
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Версия \(index + 1) из \(count)")
@@ -106,7 +106,7 @@ struct EditButtons: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            SmallCircleButton(icon: "mic.fill", label: "Изменить голосом") {
+            SmallCircleButton(icon: "mic.fill", label: String(localized: "Изменить голосом")) {
                 store.editByVoice(message.id)
             }
             ZStack {

@@ -61,7 +61,7 @@ struct ClientVersionView: View {
                 if ClientVersion.manual != nil {
                     Button(role: .destructive) {
                         ClientVersion.setManual(nil)
-                        status = "Своя версия сброшена."
+                        status = String(localized: "Своя версия сброшена.")
                         changed()
                     } label: {
                         Text("Сбросить свою версию")
@@ -87,16 +87,16 @@ struct ClientVersionView: View {
         defer { checking = false }
         switch await ClientVersion.refresh(minInterval: 0) {
         case let .updated(version):
-            status = "Обновлено до \(version)."
+            status = String(localized: "Обновлено до \(version).")
             WKHaptics.success()
             changed()
         case .upToDate:
             status = ClientVersion.manual != nil
-                ? "На GitHub \(ClientVersion.fetched ?? ClientVersion.bundled), но используется своя версия."
-                : "Уже последняя версия."
+                ? String(localized: "На GitHub \(ClientVersion.fetched ?? ClientVersion.bundled), но используется своя версия.")
+                : String(localized: "Уже последняя версия.")
             revision += 1
         case .failed, .skipped:
-            status = "Не удалось связаться с GitHub."
+            status = String(localized: "Не удалось связаться с GitHub.")
             revision += 1
         }
     }
@@ -106,11 +106,11 @@ struct ClientVersionView: View {
         guard !text.isEmpty else { return }
         if ClientVersion.setManual(text) {
             draft = ""
-            status = "Используется \(ClientVersion.current)."
+            status = String(localized: "Используется \(ClientVersion.current).")
             WKHaptics.success()
             changed()
         } else {
-            status = "Нужен номер вида 0.170.0."
+            status = String(localized: "Нужен номер вида 0.170.0.")
         }
     }
 

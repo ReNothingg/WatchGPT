@@ -39,13 +39,14 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                    ToggleTile(title: "Поиск", icon: "globe", isOn: $store.webSearch)
+                    ToggleTile(title: String(localized: "Поиск"), icon: "globe", isOn: $store.webSearch)
                     if store.selectedModel.supportsFast == true {
                         ToggleTile(title: "Fast", icon: "bolt.fill", isOn: $store.fastMode, onColor: Theme.fast, onText: .black)
                     }
-                    ToggleTile(title: "Кратко", icon: "text.alignleft", isOn: $store.conciseAnswers)
-                    ToggleTile(title: "Вслух", icon: "speaker.wave.2.fill", isOn: $store.autoSpeak)
-                    ToggleTile(title: "На iPhone", icon: "iphone.and.arrow.forward", isOn: $store.handoff)
+                    ToggleTile(title: String(localized: "Кратко"), icon: "text.alignleft", isOn: $store.conciseAnswers)
+                    ToggleTile(title: String(localized: "Вслух"), icon: "speaker.wave.2.fill", isOn: $store.autoSpeak)
+                    ToggleTile(title: String(localized: "Оповещать"), icon: "bell.fill", isOn: $store.answerNotifications)
+                    ToggleTile(title: String(localized: "На iPhone"), icon: "iphone.and.arrow.forward", isOn: $store.handoff)
                 }
                 .glassGroup(spacing: 6)
 
@@ -53,7 +54,7 @@ struct SettingsView: View {
 
                 SettingsCard {
                     NavigationLink(value: Route.voice) {
-                        SettingsRow(title: "Голос") {
+                        SettingsRow(title: String(localized: "Голос")) {
                             Text(store.voiceEngine == .apple ? "Apple" : "OpenAI · \(store.transcribeModel.title.lowercased())")
                                 .foregroundStyle(Theme.secondaryText)
                         }
@@ -74,7 +75,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     CardDivider()
                     NavigationLink(value: Route.usage) {
-                        SettingsRow(title: "Лимиты") {
+                        SettingsRow(title: String(localized: "Лимиты")) {
                             if let left = store.usage?.tightest()?.remainingPercent() {
                                 Text(Theme.percent(left))
                                     .fontWeight(.semibold)
@@ -86,9 +87,9 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     CardDivider()
                     NavigationLink(value: Route.places) {
-                        SettingsRow(title: "Умная стопка") {
+                        SettingsRow(title: String(localized: "Умная стопка")) {
                             let count = PlaceRelevance.shared.places.count
-                            Text(count == 0 ? "нет мест" : "\(count) \(SmartPlaceStore.noun(count))")
+                            Text(count == 0 ? "нет мест" : "\(count) мест")
                                 .foregroundStyle(Theme.secondaryText)
                                 .monospacedDigit()
                         }
@@ -96,12 +97,12 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     CardDivider()
                     NavigationLink(value: Route.privacy) {
-                        SettingsRow(title: "Конфиденциальность") { EmptyView() }
+                        SettingsRow(title: String(localized: "Конфиденциальность")) { EmptyView() }
                     }
                     .buttonStyle(.plain)
                     CardDivider()
                     NavigationLink(value: Route.diagnostics) {
-                        SettingsRow(title: "Диагностика") {
+                        SettingsRow(title: String(localized: "Диагностика")) {
                             let count = DiagnosticsLog.shared.entries.filter { $0.date.timeIntervalSinceNow > -86_400 }.count
                             if count > 0 {
                                 Text("\(count)")

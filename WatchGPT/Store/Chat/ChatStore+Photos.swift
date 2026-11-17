@@ -32,7 +32,7 @@ extension ChatStore {
             if names.isEmpty {
                 photoSelection = []
                 WKInterfaceDevice.current().play(.failure)
-                DiagnosticsLog.shared.record(.answer, message: "Не удалось загрузить фото", detail: "\(items.count) шт.")
+                DiagnosticsLog.shared.record(.answer, message: String(localized: "Не удалось загрузить фото"), detail: String(localized: "\(items.count) шт."))
             } else {
                 WKHaptics.success()
             }

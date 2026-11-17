@@ -91,11 +91,20 @@ struct MessageRow: View, Equatable {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ThinkingIndicator(label: searching ? "Ищу в интернете" : "Думаю", searching: searching)
-                        .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        ThinkingIndicator(label: searching ? String(localized: "Ищу в интернете") : String(localized: "Думаю"), searching: searching)
+                        if let reasoning = message.reasoning, !reasoning.isEmpty {
+                            LiveThought(reasoning: reasoning)
+                                .transition(.opacity)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
+                    if let reasoning = message.reasoning, !reasoning.isEmpty {
+                        AnswerReasoning(text: reasoning, seconds: message.thinkingSeconds)
+                    }
                     MarkdownText(text: message.text, scale: fontScale, live: isLast && store.status == .streaming)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .environment(\.tableLongPress, rewriteWithoutTables)
@@ -110,6 +119,15 @@ struct MessageRow: View, Equatable {
                             StreamingDot()
                                 .transition(.opacity.combined(with: .scale))
                         }
+                    }
+                    let settled = !(isLast && store.isBusy)
+                    if settled, let note = message.stop {
+                        StopNoteView(note: note, isLast: isLast)
+                            .padding(.top, 2)
+                    }
+                    if settled, let sources = message.sources, !sources.isEmpty {
+                        SourcesButton(sources: sources)
+                            .padding(.top, 2)
                     }
                     if isLast && store.canRefine {
                         RefineBar()
@@ -129,6 +147,6 @@ extension MessageRow {
     func rewriteWithoutTables() {
         guard !store.isBusy else { return }
         WKHaptics.click()
-        store.send("Перепиши без таблиц")
+        store.send(String(localized: "Перепиши без таблиц"))
     }
 }

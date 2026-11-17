@@ -5,7 +5,7 @@
 	<key>AppGroupID</key>
 	<string>$(APP_GROUP)</string>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>WatchGPT</string>
 	<key>CFBundleExecutable</key>

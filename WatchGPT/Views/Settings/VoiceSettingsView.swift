@@ -60,7 +60,7 @@ struct VoiceSettingsView: View {
                 } header: {
                     Text("Последняя запись")
                 } footer: {
-                    Text(store.lastVoiceLabel ?? "Так звучит то, что ушло на распознавание.")
+                    Text(store.lastVoiceLabel ?? String(localized: "Так звучит то, что ушло на распознавание."))
                 }
             }
 
@@ -111,7 +111,7 @@ struct VoiceSettingsView: View {
                 } header: {
                     Text("OpenAI")
                 } footer: {
-                    Text(auth.apiKeyError ?? "Ключ берётся из вашего входа в ChatGPT. Распознавание оплачивается с API-баланса OpenAI: около $0.0045 за минуту (быстрая модель — $0.003).")
+                    Text(auth.apiKeyError ?? String(localized: "Ключ берётся из вашего входа в ChatGPT. Распознавание оплачивается с API-баланса OpenAI: около $0.0045 за минуту (быстрая модель — $0.003)."))
                 }
             }
         }
@@ -120,16 +120,16 @@ struct VoiceSettingsView: View {
     }
 
     private var keyStatus: String {
-        guard let key = auth.apiKey else { return "нет" }
-        return key.isManual ? "свой" : "из аккаунта"
+        guard let key = auth.apiKey else { return String(localized: "нет") }
+        return key.isManual ? String(localized: "свой") : String(localized: "из аккаунта")
     }
 
     private var footer: String {
         switch store.voiceEngine {
-        case .auto: return "Сначала диктовка ChatGPT по подписке, если она недоступна — OpenAI gpt-transcribe. Понимает любые языки и формулы."
-        case .chatgpt: return "Диктовка ChatGPT по подписке. Неофициально: может не работать."
-        case .openai: return "OpenAI gpt-transcribe: любые языки, формулы записываются символами (x², √, ∫)."
-        case .apple: return "Встроенная диктовка watchOS: бесплатно и офлайн, но хуже с формулами и смешанными языками."
+        case .auto: return String(localized: "Сначала диктовка ChatGPT по подписке, если она недоступна — OpenAI gpt-transcribe. Понимает любые языки и формулы.")
+        case .chatgpt: return String(localized: "Диктовка ChatGPT по подписке. Неофициально: может не работать.")
+        case .openai: return String(localized: "OpenAI gpt-transcribe: любые языки, формулы записываются символами (x², √, ∫).")
+        case .apple: return String(localized: "Встроенная диктовка watchOS: бесплатно и офлайн, но хуже с формулами и смешанными языками.")
         }
     }
 }

@@ -52,7 +52,7 @@ extension ChatStore {
             self.isFinishingVoice = false
             guard !Task.isCancelled, self.voicePhase == .recording else { return }
             guard let url else {
-                self.failVoice("Слишком короткая запись. Нажмите и говорите.")
+                self.failVoice(String(localized: "Слишком короткая запись. Нажмите и говорите."))
                 return
             }
             WKInterfaceDevice.current().play(.click)

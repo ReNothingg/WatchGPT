@@ -9,7 +9,7 @@ struct RefineBar: View {
         HStack(spacing: 6) {
             chip(.shorter)
             chip(.longer)
-            SmallCircleButton(icon: "flag", label: "Пожаловаться на ответ") {
+            SmallCircleButton(icon: "flag", label: String(localized: "Пожаловаться на ответ")) {
                 confirmReport = true
             }
         }

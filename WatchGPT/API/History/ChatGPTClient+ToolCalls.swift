@@ -4,27 +4,27 @@ extension ChatGPTClient {
     static func toolStage(_ name: String) -> (String, String) {
         let n = name.lowercased()
         if n.hasPrefix("web") || n.contains("browser") || n.contains("search") {
-            return ("Ищу в интернете", "globe")
+            return (String(localized: "Ищу в интернете"), "globe")
         }
         if n.contains("dalle") || n.contains("image") || n.contains("t2uay3k") {
-            return ("Рисую изображение", "paintbrush")
+            return (String(localized: "Рисую изображение"), "paintbrush")
         }
         if n.contains("python") || n.contains("code") || n.contains("container") {
-            return ("Запускаю код", "terminal")
+            return (String(localized: "Запускаю код"), "terminal")
         }
         if n.contains("file") || n.contains("doc") {
-            return ("Читаю файлы", "doc.text")
+            return (String(localized: "Читаю файлы"), "doc.text")
         }
         if n.hasPrefix("bio") || n.contains("memory") {
-            return ("Обновляю память", "brain.head.profile")
+            return (String(localized: "Обновляю память"), "brain.head.profile")
         }
         if n.contains("canmore") || n.contains("canvas") {
-            return ("Пишу в холсте", "doc.richtext")
+            return (String(localized: "Пишу в холсте"), "doc.richtext")
         }
         if n.contains("research") {
-            return ("Исследую", "magnifyingglass")
+            return (String(localized: "Исследую"), "magnifyingglass")
         }
-        return ("Использую инструменты", "wrench.and.screwdriver")
+        return (String(localized: "Использую инструменты"), "wrench.and.screwdriver")
     }
 
     static func toolCall(recipient: String, content: [String: Any]) -> (title: String, detail: String, icon: String) {
@@ -75,10 +75,10 @@ extension ChatGPTClient {
             "linear": "Linear", "jira": "Jira", "confluence": "Confluence", "dropbox": "Dropbox", "box": "Box",
             "sharepoint": "SharePoint", "outlook": "Outlook", "teams": "Teams", "hubspot": "HubSpot",
             "figma": "Figma", "canva": "Canva", "asana": "Asana", "zapier": "Zapier", "stripe": "Stripe",
-            "automations": "Задачи",
+            "automations": String(localized: "Задачи"),
         ]
         if let name = known[key] { return name }
-        if key.count > 20, key.allSatisfy({ $0.isHexDigit }) { return "Интеграция" }
+        if key.count > 20, key.allSatisfy({ $0.isHexDigit }) { return String(localized: "Интеграция") }
         let words = key.split(whereSeparator: { $0 == "_" || $0 == "-" }).map { $0.prefix(1).uppercased() + $0.dropFirst() }
         return words.isEmpty ? raw : words.joined(separator: " ")
     }
@@ -90,7 +90,7 @@ extension ChatGPTClient {
         case "Google Calendar": return "calendar"
         case "Google Drive", "Dropbox", "Box", "SharePoint": return "folder"
         case "Slack", "Teams": return "bubble.left.and.bubble.right"
-        case "Задачи": return "clock"
+        case String(localized: "Задачи"): return "clock"
         default: return "puzzlepiece.extension"
         }
     }
@@ -98,13 +98,13 @@ extension ChatGPTClient {
     private static func toolAction(_ tool: String) -> String {
         let t = tool.lowercased()
         guard !t.isEmpty else { return "" }
-        if t.contains("search") || t.contains("find") || t.contains("query") { return "поиск" }
-        if t.contains("fetch") || t.contains("get") || t.contains("read") || t.contains("open") || t.contains("download") { return "читаю" }
-        if t.contains("list") { return "список" }
-        if t.contains("create") || t.contains("add") || t.contains("write") || t.contains("send") || t.contains("post") { return "создаю" }
-        if t.contains("update") || t.contains("edit") || t.contains("patch") { return "изменяю" }
-        if t.contains("delete") || t.contains("remove") { return "удаляю" }
-        if t.contains("run") || t.contains("exec") || t.contains("command") { return "выполняю команду" }
+        if t.contains("search") || t.contains("find") || t.contains("query") { return String(localized: "поиск") }
+        if t.contains("fetch") || t.contains("get") || t.contains("read") || t.contains("open") || t.contains("download") { return String(localized: "читаю") }
+        if t.contains("list") { return String(localized: "список") }
+        if t.contains("create") || t.contains("add") || t.contains("write") || t.contains("send") || t.contains("post") { return String(localized: "создаю") }
+        if t.contains("update") || t.contains("edit") || t.contains("patch") { return String(localized: "изменяю") }
+        if t.contains("delete") || t.contains("remove") { return String(localized: "удаляю") }
+        if t.contains("run") || t.contains("exec") || t.contains("command") { return String(localized: "выполняю команду") }
         return tool.replacingOccurrences(of: "_", with: " ")
     }
 

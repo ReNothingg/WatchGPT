@@ -12,9 +12,9 @@ final class PlaceRelevance: NSObject, CLLocationManagerDelegate {
 
         var errorDescription: String? {
             switch self {
-            case .denied: "Нет доступа к геопозиции. Разрешите его в настройках часов."
-            case .failed: "Не удалось определить место. Попробуйте ещё раз."
-            case .inaccurate: "Слишком неточная геопозиция. Выйдите ближе к окну и повторите."
+            case .denied: String(localized: "Нет доступа к геопозиции. Разрешите его в настройках часов.")
+            case .failed: String(localized: "Не удалось определить место. Попробуйте ещё раз.")
+            case .inaccurate: String(localized: "Слишком неточная геопозиция. Выйдите ближе к окну и повторите.")
             }
         }
     }
@@ -59,7 +59,7 @@ final class PlaceRelevance: NSObject, CLLocationManagerDelegate {
 
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let place = SmartPlace(
-            name: trimmed.isEmpty ? "Место \(places.count + 1)" : trimmed,
+            name: trimmed.isEmpty ? String(localized: "Место \(places.count + 1)") : trimmed,
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
             radius: max(radius, location.horizontalAccuracy)

@@ -28,6 +28,9 @@ extension ChatStore {
             if Task.isCancelled { return }
             do {
                 let history = messages.filter { $0.id != replyID }
+                if text(of: replyID).isEmpty {
+                    update(replyID) { $0.reasoning = nil; $0.sources = nil; $0.stop = nil; $0.thinkingSeconds = nil }
+                }
                 let stream: AsyncThrowingStream<ChatGPTClient.StreamEvent, Error>
                 if useClaude {
                     guard let key = auth.claudeKey?.key else { throw AnthropicClient.APIError.noKey }
@@ -38,11 +41,25 @@ extension ChatStore {
                 }
 
                 var pending = ""
+                var pendingThinking = ""
+                var thinkingStarted: ContinuousClock.Instant?
                 var shownLength = 0
                 var lastFlush = ContinuousClock.now - .seconds(1)
                 var interval = Self.flushInterval(length: 0)
                 var lastIntervalCheck = ContinuousClock.now
+                func flushThinking() {
+                    guard !pendingThinking.isEmpty else { return }
+                    let chunk = pendingThinking
+                    pendingThinking = ""
+                    lastFlush = .now
+                    update(replyID) {
+                        let current = $0.reasoning ?? ""
+                        if current.count < ChatMessage.maxReasoning { $0.reasoning = current + chunk }
+                    }
+                    keepAlive.hold()
+                }
                 func flush() {
+                    flushThinking()
                     guard !pending.isEmpty else { return }
                     let chunk = pending
                     pending = ""
@@ -71,9 +88,29 @@ extension ChatStore {
                         case .responseStarted:
                             if status == .waitingForNetwork { status = .thinking }
                         case let .textDelta(delta):
-                            if status != .streaming { status = .streaming }
+                            if status != .streaming {
+                                status = .streaming
+                                if let started = thinkingStarted {
+                                    let seconds = Int((ContinuousClock.now - started) / .seconds(1))
+                                    update(replyID) { $0.thinkingSeconds = max(1, seconds) }
+                                    thinkingStarted = nil
+                                }
+                            }
                             pending += delta
                             if ContinuousClock.now - lastFlush >= interval { flush() }
+                        case let .thinkingDelta(delta):
+                            if thinkingStarted == nil, status != .streaming { thinkingStarted = .now }
+                            pendingThinking += delta
+                            if ContinuousClock.now - lastFlush >= interval { flushThinking() }
+                        case let .source(source):
+                            update(replyID) {
+                                var sources = $0.sources ?? []
+                                guard sources.count < ChatMessage.maxSources, !sources.contains(where: { $0.url == source.url }) else { return }
+                                sources.append(source)
+                                $0.sources = sources
+                            }
+                        case let .stopped(note):
+                            update(replyID) { $0.stop = note }
                         case .searching:
                             flush()
                             if status != .streaming && status != .searching { status = .searching }
@@ -90,12 +127,17 @@ extension ChatStore {
                 }
 
                 if text(of: replyID).isEmpty {
-                    update(replyID) { $0.text = "Пустой ответ. Попробуйте ещё раз."; $0.isError = true }
+                    let stop = messages.last { $0.id == replyID }?.stop
+                    update(replyID) {
+                        $0.text = stop?.label ?? String(localized: "Пустой ответ. Попробуйте ещё раз.")
+                        $0.isError = true
+                    }
                     WKInterfaceDevice.current().play(.failure)
                 } else {
                     DiagnosticsLog.shared.markSuccess()
                     widgetAnswer = makeWidgetAnswer(replyID: replyID, chatID: chatID) ?? widgetAnswer
-                    WKInterfaceDevice.current().play(.success)
+                    let notified = await notifyAnswerReady(replyID: replyID, chatID: chatID)
+                    if !notified { WKInterfaceDevice.current().play(.success) }
                     if autoSpeak && !siriRequest { speaker.speak(text(of: replyID)) }
                 }
                 return
@@ -150,6 +192,22 @@ extension ChatStore {
         return .milliseconds(PowerMonitor.shared.isLowPower ? base * 2 : base)
     }
 
+    func notifyAnswerReady(replyID: UUID, chatID: String) async -> Bool {
+        guard answerNotifications, !siriRequest, WKApplication.shared().applicationState != .active else { return false }
+        let question = messages.last { $0.role == .user }
+        return await AnswerNotifier.post(
+            question: Self.widgetText(question?.refine?.label ?? question?.text ?? "", limit: 60),
+            answer: Self.widgetText(text(of: replyID), limit: 180),
+            chatID: chatID
+        )
+    }
+
+    func continueAnswer() {
+        guard !isBusy, messages.last?.stop?.canContinue == true else { return }
+        didAutoResume = false
+        submit(String(localized: "Продолжи с того места, где остановился"))
+    }
+
     func fail(_ replyID: UUID, _ error: Error) {
         DiagnosticsLog.shared.record(.answer, error)
         let message = Self.describe(error)
@@ -165,11 +223,11 @@ extension ChatStore {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
-                return "Нет интернета. Проверьте связь с iPhone или Wi‑Fi."
+                return String(localized: "Нет интернета. Проверьте связь с iPhone или Wi‑Fi.")
             case .timedOut:
-                return "Сервер долго не отвечает. Попробуйте ещё раз."
+                return String(localized: "Сервер долго не отвечает. Попробуйте ещё раз.")
             default:
-                return "Ошибка сети: \(urlError.localizedDescription)"
+                return String(localized: "Ошибка сети: \(urlError.localizedDescription)")
             }
         }
         return error.localizedDescription

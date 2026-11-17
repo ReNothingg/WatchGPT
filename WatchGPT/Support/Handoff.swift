@@ -29,7 +29,7 @@ enum Handoff {
 
     static func url(code: String, language: String, claude: Bool) -> URL? {
         let fence = "```"
-        let header = "Код из ответа на Apple Watch:"
+        let header = String(localized: "Код из ответа на Apple Watch:")
         let body = clip(code, promptBudget - header.utf8.count - language.utf8.count - 16)
         let prompt = "\(header)\n\n\(fence)\(language)\n\(body)\n\(fence)"
         return url(prompt: prompt, base: claude ? claudeBase : base)
@@ -52,7 +52,7 @@ enum Handoff {
         var used = 0
         var omitted = false
         for message in usable.reversed() {
-            let speaker = message.role == .user ? "Я" : (message.claude == true ? "Claude" : "ChatGPT")
+            let speaker = message.role == .user ? String(localized: "Я") : (message.claude == true ? "Claude" : "ChatGPT")
             let line = "\(speaker): \(clip(message.text, messageBudget))"
             let size = line.utf8.count + 2
             if used + size > promptBudget {
@@ -65,10 +65,10 @@ enum Handoff {
             used += size
         }
 
-        var parts = ["Продолжаю разговор, который начал на Apple Watch."]
-        if omitted { parts.append("(Начало разговора пропущено.)") }
+        var parts = [String(localized: "Продолжаю разговор, который начал на Apple Watch.")]
+        if omitted { parts.append(String(localized: "(Начало разговора пропущено.)")) }
         parts.append(lines.joined(separator: "\n\n"))
-        parts.append("Продолжим отсюда, с учётом этого контекста.")
+        parts.append(String(localized: "Продолжим отсюда, с учётом этого контекста."))
         return parts.joined(separator: "\n\n")
     }
 

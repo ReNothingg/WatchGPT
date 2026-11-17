@@ -5,19 +5,19 @@ struct VoiceEditControls: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            SmallCircleButton(icon: "xmark", label: "Отменить") {
+            SmallCircleButton(icon: "xmark", label: String(localized: "Отменить")) {
                 WKHaptics.click()
                 store.cancelVoice()
             }
             switch store.voicePhase {
             case .recording:
-                SmallCircleButton(icon: "checkmark", prominent: true, doubleTap: true, label: "Отправить") {
+                SmallCircleButton(icon: "checkmark", prominent: true, doubleTap: true, label: String(localized: "Отправить")) {
                     store.finishVoice()
                 }
                 .transition(.scale.combined(with: .opacity))
             case .failed:
                 if !store.voiceGivingUp {
-                    SmallCircleButton(icon: "arrow.clockwise", prominent: true, doubleTap: true, label: "Повторить") {
+                    SmallCircleButton(icon: "arrow.clockwise", prominent: true, doubleTap: true, label: String(localized: "Повторить")) {
                         store.retryTranscription()
                     }
                     .transition(.scale.combined(with: .opacity))

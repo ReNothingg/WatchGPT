@@ -8,7 +8,7 @@ enum HistorySource: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .gpt: return "ChatGPT"
-        case .watch: return "На часах"
+        case .watch: return String(localized: "На часах")
         }
     }
 

@@ -8,8 +8,8 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
 
         var label: String {
             switch self {
-            case .shorter: return "Короче"
-            case .longer: return "Подробнее"
+            case .shorter: return String(localized: "Короче")
+            case .longer: return String(localized: "Подробнее")
             }
         }
 
@@ -37,6 +37,47 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
+    enum StopNote: String, Codable, Sendable {
+        case maxTokens, contextWindow, refusal, filtered, paused
+
+        var canContinue: Bool { self == .maxTokens || self == .paused }
+
+        var label: String {
+            switch self {
+            case .maxTokens: return String(localized: "Ответ обрезан: достигнут предел длины.")
+            case .contextWindow: return String(localized: "Чат стал слишком длинным, ответ обрезан. Начните новый чат.")
+            case .refusal: return String(localized: "Модель прервала ответ и отказалась продолжать.")
+            case .filtered: return String(localized: "Ответ остановлен фильтром содержимого.")
+            case .paused: return String(localized: "Поиск занял слишком много шагов, ответ может быть неполным.")
+            }
+        }
+    }
+
+    struct Source: Codable, Equatable, Hashable, Identifiable, Sendable {
+        var url: String
+        var title: String
+
+        var id: String { url }
+
+        var host: String {
+            let host = URL(string: url)?.host() ?? url
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
+
+        init?(url: String?, title: String?) {
+            guard let raw = url?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+                  var components = URLComponents(string: raw), components.scheme?.hasPrefix("http") == true else { return nil }
+            let kept = components.queryItems?.filter { !$0.name.hasPrefix("utm_") }
+            components.queryItems = kept?.isEmpty == false ? kept : nil
+            self.url = components.string ?? raw
+            let name = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            self.title = name.isEmpty ? (components.host ?? raw) : name
+        }
+    }
+
+    static let maxSources = 12
+    static let maxReasoning = 12_000
+
     var id = UUID()
     var role: Role
     var text: String
@@ -48,6 +89,10 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     var versions: [[ChatMessage]]?
     var versionIndex: Int?
     var images: [String]?
+    var stop: StopNote?
+    var sources: [Source]?
+    var reasoning: String?
+    var thinkingSeconds: Int?
 
     var modelText: String { refine?.prompt ?? text }
 
@@ -81,12 +126,12 @@ struct ModelOption: Codable, Identifiable, Hashable, Sendable {
     var id: String { slug }
 
     static let fallback: [ModelOption] = [
-        .init(slug: "gpt-6.1-sol", displayName: "GPT-6.1-Sol", summary: "Основная модель на каждый день", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 1),
-        .init(slug: "gpt-6-astra", displayName: "GPT-6-Astra", summary: "Самая умная, для сложных задач", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 2),
-        .init(slug: "gpt-6-sol", displayName: "GPT-6-Sol", summary: "Прошлое поколение", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium", supportsVerbosity: true, priority: 3),
-        .init(slug: "gpt-6-luna", displayName: "GPT-6-Luna", summary: "Быстрая и лёгкая", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium", supportsVerbosity: true, priority: 4),
-        .init(slug: "gpt-5.6-sol", displayName: "GPT-5.6-Sol", summary: "Старое поколение", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 5),
-        .init(slug: "gpt-5.5", displayName: "GPT-5.5", summary: "Устаревшая", efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "medium", supportsVerbosity: true, priority: 13),
+        .init(slug: "gpt-6.1-sol", displayName: "GPT-6.1-Sol", summary: String(localized: "Основная модель на каждый день"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 1),
+        .init(slug: "gpt-6-astra", displayName: "GPT-6-Astra", summary: String(localized: "Самая умная, для сложных задач"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 2),
+        .init(slug: "gpt-6-sol", displayName: "GPT-6-Sol", summary: String(localized: "Прошлое поколение"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium", supportsVerbosity: true, priority: 3),
+        .init(slug: "gpt-6-luna", displayName: "GPT-6-Luna", summary: String(localized: "Быстрая и лёгкая"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium", supportsVerbosity: true, priority: 4),
+        .init(slug: "gpt-5.6-sol", displayName: "GPT-5.6-Sol", summary: String(localized: "Старое поколение"), efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "low", supportsVerbosity: true, priority: 5),
+        .init(slug: "gpt-5.5", displayName: "GPT-5.5", summary: String(localized: "Устаревшая"), efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "medium", supportsVerbosity: true, priority: 13),
     ]
 
     static let claudeFallback: [ModelOption] = [
@@ -102,14 +147,14 @@ struct ModelOption: Codable, Identifiable, Hashable, Sendable {
 
     static func effortLabel(_ effort: String) -> String {
         switch effort {
-        case "none": return "Без рассуждений"
-        case "minimal": return "Минимальное"
-        case "low": return "Низкое"
-        case "medium": return "Среднее"
-        case "high": return "Высокое"
-        case "xhigh": return "Очень высокое"
-        case "max": return "Максимальное"
-        case "ultra": return "Ультра"
+        case "none": return String(localized: "Без рассуждений")
+        case "minimal": return String(localized: "Минимальное")
+        case "low": return String(localized: "Низкое")
+        case "medium": return String(localized: "Среднее")
+        case "high": return String(localized: "Высокое")
+        case "xhigh": return String(localized: "Очень высокое")
+        case "max": return String(localized: "Максимальное")
+        case "ultra": return String(localized: "Ультра")
         default: return effort.capitalized
         }
     }

@@ -62,7 +62,7 @@ extension ChatGPTClient {
         let title = (obj["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return RemoteConversation(
             id: id,
-            title: title.isEmpty ? "Без названия" : title,
+            title: title.isEmpty ? String(localized: "Без названия") : title,
             updatedAt: updatedAt,
             messages: messages,
             images: images,
@@ -183,11 +183,11 @@ extension ChatGPTClient {
         switch role(raw) {
         case "user":
             let parts = (raw["content"] as? [String: Any])?["parts"] as? [Any] ?? []
-            return imageParts(parts).isEmpty ? ("Думаю", "brain") : ("Смотрю на изображение", "eye")
+            return imageParts(parts).isEmpty ? (String(localized: "Думаю"), "brain") : (String(localized: "Смотрю на изображение"), "eye")
         case "tool":
             let name = (raw["author"] as? [String: Any])?["name"] as? String ?? ""
             let (title, icon) = toolStage(name)
-            return name.isEmpty ? ("Изучаю результаты", "doc.text.magnifyingglass") : (title, icon)
+            return name.isEmpty ? (String(localized: "Изучаю результаты"), "doc.text.magnifyingglass") : (title, icon)
         default:
             break
         }
@@ -197,11 +197,11 @@ extension ChatGPTClient {
         }
         switch contentType(raw) {
         case "thoughts":
-            return ("Думаю", "brain")
+            return (String(localized: "Думаю"), "brain")
         case "text", "multimodal_text", "reasoning_recap":
-            return ("Пишу ответ", "pencil")
+            return (String(localized: "Пишу ответ"), "pencil")
         default:
-            return ("Думаю", "brain")
+            return (String(localized: "Думаю"), "brain")
         }
     }
 
@@ -248,7 +248,7 @@ extension ChatGPTClient {
     }
 
     private static func imageLabel(_ count: Int) -> String {
-        count == 1 ? "\(HistoryText.imageMark) Изображение" : "\(HistoryText.imageMark) Изображения: \(count)"
+        "\(HistoryText.imageMark) " + (count == 1 ? String(localized: "Изображение") : String(localized: "Изображения: \(count)"))
     }
 
     private static let preciseDates: ISO8601DateFormatter = {

@@ -15,14 +15,14 @@ struct ChatGPTClient: Sendable {
         var errorDescription: String? {
             switch self {
             case .unauthorized:
-                return "Нужно заново войти в ChatGPT."
+                return String(localized: "Нужно заново войти в ChatGPT.")
             case let .usageLimit(resetAt):
                 if let resetAt {
-                    return "Лимит исчерпан. Сброс \(resetAt.formatted(.relative(presentation: .named)))."
+                    return String(localized: "Лимит исчерпан. Сброс \(resetAt.formatted(.relative(presentation: .named))).")
                 }
-                return "Лимит подписки исчерпан."
+                return String(localized: "Лимит подписки исчерпан.")
             case let .http(code, message):
-                return message.isEmpty ? "Ошибка сервера (\(code))." : message
+                return message.isEmpty ? String(localized: "Ошибка сервера (\(code)).") : message
             case let .stream(message):
                 return message
             }
@@ -33,6 +33,9 @@ struct ChatGPTClient: Sendable {
         case waitingForNetwork
         case responseStarted
         case textDelta(String)
+        case thinkingDelta(String)
+        case source(ChatMessage.Source)
+        case stopped(ChatMessage.StopNote)
         case searching
         case usage(UsageSnapshot)
         case completed
@@ -67,6 +70,10 @@ struct ChatGPTClient: Sendable {
         "response.output_text.delta",
         "response.output_text.done",
         "response.output_item.added",
+        "response.output_text.annotation.added",
+        "response.reasoning_summary_text.delta",
+        "response.reasoning_summary_part.added",
+        "response.incomplete",
         "codex.rate_limits",
         "response.failed",
         "error",
@@ -96,7 +103,7 @@ struct ChatGPTClient: Sendable {
 
         let delegate = ConnectivityDelegate { continuation.yield(.waitingForNetwork) }
         let (bytes, response) = try await Self.streamSession.bytes(for: request, delegate: delegate)
-        guard let http = response as? HTTPURLResponse else { throw APIError.stream("Нет ответа от сервера.") }
+        guard let http = response as? HTTPURLResponse else { throw APIError.stream(String(localized: "Нет ответа от сервера.")) }
         continuation.yield(.responseStarted)
 
         if let usage = Self.usage(fromHeaders: http) {
@@ -113,13 +120,14 @@ struct ChatGPTClient: Sendable {
         }
 
         var sawText = false
+        var sawThinking = false
         for try await line in bytes.lines {
             try Task.checkCancellation()
             guard line.hasPrefix("data:") else { continue }
             let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
             if payload == "[DONE]" { break }
             if let quick = Self.quickType(payload) {
-                if quick == "response.completed" || quick == "response.incomplete" {
+                if quick == "response.completed" {
                     continuation.yield(.completed)
                     return
                 }
@@ -145,18 +153,37 @@ struct ChatGPTClient: Sendable {
                 if let item = event["item"] as? [String: Any], (item["type"] as? String) == "web_search_call" {
                     continuation.yield(.searching)
                 }
+            case "response.output_text.annotation.added":
+                let annotation = event["annotation"] as? [String: Any]
+                if (annotation?["type"] as? String) == "url_citation",
+                   let source = ChatMessage.Source(url: annotation?["url"] as? String, title: annotation?["title"] as? String) {
+                    continuation.yield(.source(source))
+                }
+            case "response.reasoning_summary_part.added":
+                if sawThinking { continuation.yield(.thinkingDelta("\n\n")) }
+            case "response.reasoning_summary_text.delta":
+                if let delta = event["delta"] as? String, !delta.isEmpty {
+                    sawThinking = true
+                    continuation.yield(.thinkingDelta(delta))
+                }
             case "codex.rate_limits":
                 if let usage = Self.usage(fromEvent: event) { continuation.yield(.usage(usage)) }
-            case "response.completed", "response.incomplete":
+            case "response.incomplete":
+                let response = event["response"] as? [String: Any]
+                let reason = (response?["incomplete_details"] as? [String: Any])?["reason"] as? String
+                continuation.yield(.stopped(reason == "content_filter" ? .filtered : .maxTokens))
+                continuation.yield(.completed)
+                return
+            case "response.completed":
                 continuation.yield(.completed)
                 return
             case "response.failed":
                 let response = event["response"] as? [String: Any]
                 let error = response?["error"] as? [String: Any]
-                throw APIError.stream((error?["message"] as? String) ?? "Не удалось получить ответ.")
+                throw APIError.stream((error?["message"] as? String) ?? String(localized: "Не удалось получить ответ."))
             case "error":
                 let error = event["error"] as? [String: Any]
-                let message = (event["message"] as? String) ?? (error?["message"] as? String) ?? "Ошибка генерации."
+                let message = (event["message"] as? String) ?? (error?["message"] as? String) ?? String(localized: "Ошибка генерации.")
                 throw APIError.stream(message)
             default:
                 continue
@@ -209,7 +236,7 @@ struct ChatGPTClient: Sendable {
             body["tools"] = [["type": "web_search", "external_web_access": true]]
         }
         if let effort = options.effort {
-            body["reasoning"] = ["effort": effort]
+            body["reasoning"] = ["effort": effort, "summary": "auto"]
         }
         if let verbosity = options.verbosity {
             body["text"] = ["verbosity": verbosity]
@@ -227,7 +254,7 @@ struct ChatGPTClient: Sendable {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw Self.error(status: status, body: data, response: response as? HTTPURLResponse) }
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw APIError.stream("Не удалось прочитать лимиты.")
+            throw APIError.stream(String(localized: "Не удалось прочитать лимиты."))
         }
 
         func window(_ any: Any?) -> UsageWindow? {
@@ -351,7 +378,7 @@ struct ChatGPTClient: Sendable {
                 resetAt = Date.now.addingTimeInterval(seconds)
             }
             if type.contains("usage_limit") || resetAt != nil { return .usageLimit(resetAt: resetAt) }
-            return .http(status, message.isEmpty ? "Слишком много запросов. Подождите немного." : message)
+            return .http(status, message.isEmpty ? String(localized: "Слишком много запросов. Подождите немного.") : message)
         }
         return .http(status, message)
     }
@@ -366,8 +393,8 @@ struct ChatGPTClient: Sendable {
         if let blocked = networkBlock(obj: obj, type: type, message: message, body: body, response: response) {
             return blocked
         }
-        let reason = message.isEmpty ? (type.isEmpty ? "без пояснений" : type) : message
-        return .http(403, "Аккаунт: доступ запрещён (403) — \(reason). Проверьте подписку или войдите заново.")
+        let reason = message.isEmpty ? (type.isEmpty ? String(localized: "без пояснений") : type) : message
+        return .http(403, String(localized: "Аккаунт: доступ запрещён (403) — \(reason). Проверьте подписку или войдите заново."))
     }
 
     static func networkBlock(body: Data, response: HTTPURLResponse?) -> APIError? {
@@ -402,12 +429,12 @@ struct ChatGPTClient: Sendable {
                 || text.contains("attention required")
                 || text.contains("<html")))
         if isCloudflare {
-            return .http(403, "Cloudflare заблокировал запрос (403): IP вашего DNS/прокси под подозрением. Смените DNS или включите VPN.\(ray)")
+            return .http(403, String(localized: "Cloudflare заблокировал запрос (403): IP вашего DNS/прокси под подозрением. Смените DNS или включите VPN.\(ray)"))
         }
 
         let hint = (type + " " + message).lowercased()
         if ["unsupported_country", "country", "region", "territory"].contains(where: hint.contains) {
-            return .http(403, "OpenAI не обслуживает ваш регион (403). Нужен DNS или VPN с поддерживаемой страной.")
+            return .http(403, String(localized: "OpenAI не обслуживает ваш регион (403). Нужен DNS или VPN с поддерживаемой страной."))
         }
         return nil
     }

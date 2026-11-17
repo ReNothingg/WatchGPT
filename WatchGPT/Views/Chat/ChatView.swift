@@ -118,7 +118,7 @@ struct ChatView: View {
         }
         .handoffActivity(
             isActive: store.codeHandoff != nil || (store.handoff && store.path.isEmpty && !store.isBusy && store.lastAnswer != nil),
-            title: store.codeHandoff != nil ? "Код из WatchGPT" : "Чат WatchGPT"
+            title: store.codeHandoff != nil ? String(localized: "Код из WatchGPT") : String(localized: "Чат WatchGPT")
         ) {
             store.codeHandoff ?? Handoff.url(conversationID: store.conversationID, messages: store.messages, claude: store.provider == .claude)
         }

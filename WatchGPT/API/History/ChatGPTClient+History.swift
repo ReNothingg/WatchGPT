@@ -9,11 +9,11 @@ extension ChatGPTClient {
         var errorDescription: String? {
             switch self {
             case let .notAllowed(code):
-                return "ChatGPT не открыл историю для этого входа (\(code)). Возможно, OpenAI закрыл к ней доступ для Codex."
+                return String(localized: "ChatGPT не открыл историю для этого входа (\(code)). Возможно, OpenAI закрыл к ней доступ для Codex.")
             case .notFound:
-                return "Чат не найден: возможно, его удалили или перенесли в архив."
+                return String(localized: "Чат не найден: возможно, его удалили или перенесли в архив.")
             case .unreadable:
-                return "Не удалось прочитать историю ChatGPT."
+                return String(localized: "Не удалось прочитать историю ChatGPT.")
             }
         }
     }
@@ -46,7 +46,7 @@ extension ChatGPTClient {
             guard let id = item["id"] as? String, !id.isEmpty else { return nil }
             let title = (item["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let updated = Self.date(item["update_time"]) ?? Self.date(item["create_time"]) ?? .distantPast
-            return RemoteChat(id: id, title: title.isEmpty ? "Без названия" : title, updatedAt: updated)
+            return RemoteChat(id: id, title: title.isEmpty ? String(localized: "Без названия") : title, updatedAt: updated)
         }
 
         let nextCursor = (obj["cursor"] as? String).flatMap { $0.isEmpty ? nil : $0 }
@@ -133,7 +133,7 @@ extension ChatGPTClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status), !data.isEmpty else {
-            throw APIError.http(status, "Картинка не загрузилась (\(status)).")
+            throw APIError.http(status, String(localized: "Картинка не загрузилась (\(status))."))
         }
         return data
     }

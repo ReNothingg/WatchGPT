@@ -8,7 +8,7 @@ enum VoiceEngine: String, CaseIterable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .auto: return "Авто"
+        case .auto: return String(localized: "Авто")
         case .chatgpt: return "ChatGPT"
         case .openai: return "OpenAI API"
         case .apple: return "Apple"
@@ -22,8 +22,8 @@ enum TranscribeModel: String, CaseIterable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .best: return "Точная"
-        case .fast: return "Быстрая"
+        case .best: return String(localized: "Точная")
+        case .fast: return String(localized: "Быстрая")
         }
     }
 }
@@ -46,19 +46,19 @@ enum Transcriber {
 
         var errorDescription: String? {
             switch self {
-            case .empty: return "Не расслышал. Попробуйте ещё раз."
-            case .noQuota: return "На API-аккаунте OpenAI нет средств для распознавания. Пополните баланс на platform.openai.com или выберите Apple-диктовку."
-            case .badKey: return "API-ключ OpenAI не подошёл. Получите новый в настройках."
-            case let .http(code, message): return message.isEmpty ? "Ошибка распознавания (\(code))." : message
-            case .unavailable: return "Распознавание ChatGPT недоступно."
-            case let .chatgpt(code): return "Диктовка ChatGPT не сработала (\(code)). Попробуйте ещё раз или выберите Apple-диктовку."
-            case let .noEngine(reason): return "Не получилось распознать речь. \(reason)"
+            case .empty: return String(localized: "Не расслышал. Попробуйте ещё раз.")
+            case .noQuota: return String(localized: "На API-аккаунте OpenAI нет средств для распознавания. Пополните баланс на platform.openai.com или выберите Apple-диктовку.")
+            case .badKey: return String(localized: "API-ключ OpenAI не подошёл. Получите новый в настройках.")
+            case let .http(code, message): return message.isEmpty ? String(localized: "Ошибка распознавания (\(code)).") : message
+            case .unavailable: return String(localized: "Распознавание ChatGPT недоступно.")
+            case let .chatgpt(code): return String(localized: "Диктовка ChatGPT не сработала (\(code)). Попробуйте ещё раз или выберите Apple-диктовку.")
+            case let .noEngine(reason): return String(localized: "Не получилось распознать речь. \(reason)")
             }
         }
     }
 
     static let languages: [(code: String, name: String)] = [
-        ("auto", "Авто"), ("ru", "Русский"), ("en", "English"), ("uk", "Українська"), ("de", "Deutsch"),
+        ("auto", String(localized: "Авто")), ("ru", "Русский"), ("en", "English"), ("uk", "Українська"), ("de", "Deutsch"),
         ("es", "Español"), ("fr", "Français"), ("it", "Italiano"), ("pt", "Português"), ("tr", "Türkçe"),
         ("kk", "Қазақша"), ("pl", "Polski"), ("zh", "中文"), ("ja", "日本語"), ("ko", "한국어"), ("ar", "العربية"),
     ]
@@ -140,8 +140,8 @@ enum Transcriber {
             } catch let error as URLError {
                 throw error
             } catch OAuth.Failure.noAPIOrganization {
-                let reason = chatgptError?.localizedDescription ?? "Диктовка ChatGPT не ответила."
-                throw TranscribeError.noEngine("\(reason) Запасной вариант через OpenAI API недоступен: у аккаунта нет API-организации.")
+                let reason = chatgptError?.localizedDescription ?? String(localized: "Диктовка ChatGPT не ответила.")
+                throw TranscribeError.noEngine(String(localized: "\(reason) Запасной вариант через OpenAI API недоступен: у аккаунта нет API-организации."))
             } catch {
                 if let chatgptError, !hasKey { throw chatgptError }
                 throw error

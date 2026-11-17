@@ -11,18 +11,18 @@ struct UsageWindow: Codable, Equatable, Sendable {
     }
 
     var shortLabel: String {
-        guard let m = windowMinutes, m > 0 else { return "лимит" }
-        if m >= 7 * 24 * 60 - 60 { return "нед" }
-        if m >= 24 * 60 { return "\(Int((Double(m) / 1440).rounded()))д" }
-        if m >= 60 { return "\(Int((Double(m) / 60).rounded()))ч" }
-        return "\(m)м"
+        guard let m = windowMinutes, m > 0 else { return String(localized: "лимит") }
+        if m >= 7 * 24 * 60 - 60 { return String(localized: "нед") }
+        if m >= 24 * 60 { return String(localized: "\(Int((Double(m) / 1440).rounded()))д") }
+        if m >= 60 { return String(localized: "\(Int((Double(m) / 60).rounded()))ч") }
+        return String(localized: "\(m)м")
     }
 
     var longLabel: String {
-        guard let m = windowMinutes, m > 0 else { return "Лимит" }
-        if m >= 7 * 24 * 60 - 60 { return "Неделя" }
-        if m >= 60 { return "\(Int((Double(m) / 60).rounded())) часов" }
-        return "\(m) минут"
+        guard let m = windowMinutes, m > 0 else { return String(localized: "Лимит") }
+        if m >= 7 * 24 * 60 - 60 { return String(localized: "Неделя") }
+        if m >= 60 { return String(localized: "\(Int((Double(m) / 60).rounded())) часов") }
+        return String(localized: "\(m) минут")
     }
 }
 

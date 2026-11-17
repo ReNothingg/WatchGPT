@@ -22,12 +22,12 @@ enum OAuth {
         var errorDescription: String? {
             switch self {
             case .deviceCodeDisabled:
-                return "Вход по коду недоступен. Включите «Device code» для Codex в настройках безопасности ChatGPT."
-            case .expired: return "Код истёк. Попробуйте снова."
-            case let .http(code, body): return "Ошибка входа (\(code)). \(OAuth.readableMessage(body).prefix(160))"
-            case .badResponse: return "Неожиданный ответ сервера."
+                return String(localized: "Вход по коду недоступен. Включите «Device code» для Codex в настройках безопасности ChatGPT.")
+            case .expired: return String(localized: "Код истёк. Попробуйте снова.")
+            case let .http(code, body): return String(localized: "Ошибка входа (\(code)). \(String(OAuth.readableMessage(body).prefix(160)))")
+            case .badResponse: return String(localized: "Неожиданный ответ сервера.")
             case .noAPIOrganization:
-                return "Вход ChatGPT не привязан к API-организации, поэтому ключ не выдаётся автоматически. Создайте ключ на platform.openai.com в нужной организации и вставьте его с iPhone."
+                return String(localized: "Вход ChatGPT не привязан к API-организации, поэтому ключ не выдаётся автоматически. Создайте ключ на platform.openai.com в нужной организации и вставьте его с iPhone.")
             }
         }
     }

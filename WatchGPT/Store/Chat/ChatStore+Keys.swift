@@ -8,6 +8,7 @@ extension ChatStore {
         static let autoSpeak = "settings.autoSpeak"
         static let concise = "settings.concise"
         static let fast = "settings.fast"
+        static let answerNotifications = "settings.answerNotifications"
         static let voiceEngine = "settings.voiceEngine"
         static let transcribeModel = "settings.transcribeModel"
         static let voiceLanguage = "settings.voiceLanguage"

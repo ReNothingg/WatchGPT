@@ -122,9 +122,9 @@ struct DiagnosticsView: View {
 
     private var checkSubtitle: String {
         switch check {
-        case .idle: return "Запрос лимитов к серверу ChatGPT"
-        case .running: return "Проверяю…"
-        case let .ok(ms): return "Сервер отвечает · \(ms) мс"
+        case .idle: return String(localized: "Запрос лимитов к серверу ChatGPT")
+        case .running: return String(localized: "Проверяю…")
+        case let .ok(ms): return String(localized: "Сервер отвечает · \(ms) мс")
         case let .failed(message): return message
         }
     }
@@ -168,7 +168,7 @@ struct DiagnosticsView: View {
         ForEach(log.entries) { entry in
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(entry.source.rawValue)
+                    Text(entry.source.title)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.orange)
                     Text(entry.date.formatted(.relative(presentation: .named)))
@@ -203,41 +203,41 @@ struct DiagnosticsView: View {
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         let device = WKInterfaceDevice.current()
         var rows = [
-            InfoRow(title: "Приложение", value: "\(version) (\(build))"),
+            InfoRow(title: String(localized: "Приложение"), value: "\(version) (\(build))"),
             InfoRow(title: "watchOS", value: device.systemVersion),
             InfoRow(title: "Codex client", value: ChatGPTClient.clientVersion),
-            InfoRow(title: "Модель", value: store.selectedModelSlug),
-            InfoRow(title: "Последний ответ", value: log.lastSuccess.map { $0.formatted(.relative(presentation: .named)) } ?? "—"),
+            InfoRow(title: String(localized: "Модель"), value: store.selectedModelSlug),
+            InfoRow(title: String(localized: "Последний ответ"), value: log.lastSuccess.map { $0.formatted(.relative(presentation: .named)) } ?? "—"),
         ]
         if let tokens = auth.tokens {
-            rows.append(InfoRow(title: "Тариф", value: store.usage?.planLabel ?? tokens.planType?.capitalized ?? "—"))
+            rows.append(InfoRow(title: String(localized: "Тариф"), value: store.usage?.planLabel ?? tokens.planType?.capitalized ?? "—"))
             if let expiry = tokens.accessTokenExpiry {
-                let value = expiry > .now ? "до \(expiry.formatted(date: .abbreviated, time: .shortened))" : "истёк, обновится сам"
-                rows.append(InfoRow(title: "Токен", value: value))
+                let value = expiry > .now ? String(localized: "до \(expiry.formatted(date: .abbreviated, time: .shortened))") : String(localized: "истёк, обновится сам")
+                rows.append(InfoRow(title: String(localized: "Токен"), value: value))
             }
-            rows.append(InfoRow(title: "Обновлён", value: tokens.lastRefresh.formatted(.relative(presentation: .named))))
+            rows.append(InfoRow(title: String(localized: "Обновлён"), value: tokens.lastRefresh.formatted(.relative(presentation: .named))))
         } else {
-            rows.append(InfoRow(title: "Аккаунт", value: "не подключён"))
+            rows.append(InfoRow(title: String(localized: "Аккаунт"), value: String(localized: "не подключён")))
         }
         let key: String
-        if let apiKey = auth.apiKey { key = apiKey.isManual ? "свой" : "из входа" } else { key = "нет" }
-        rows.append(InfoRow(title: "API-ключ", value: key))
-        rows.append(InfoRow(title: "Энергосбережение", value: PowerMonitor.shared.isLowPower ? "вкл" : "выкл"))
+        if let apiKey = auth.apiKey { key = apiKey.isManual ? String(localized: "свой") : String(localized: "из входа") } else { key = String(localized: "нет") }
+        rows.append(InfoRow(title: String(localized: "API-ключ"), value: key))
+        rows.append(InfoRow(title: String(localized: "Энергосбережение"), value: PowerMonitor.shared.isLowPower ? String(localized: "вкл") : String(localized: "выкл")))
         return rows
     }
 
     private func report() -> String {
-        var lines = ["WatchGPT — диагностика", "Создан: \(Date.now.formatted(date: .abbreviated, time: .standard))", ""]
+        var lines = [String(localized: "WatchGPT — диагностика"), String(localized: "Создан: \(Date.now.formatted(date: .abbreviated, time: .standard))"), ""]
         lines += infoRows().map { "\($0.title): \($0.value)" }
         lines.append("")
         if log.entries.isEmpty {
-            lines.append("Ошибок нет.")
+            lines.append(String(localized: "Ошибок нет."))
         } else {
-            lines.append("Ошибки:")
+            lines.append(String(localized: "Ошибки:"))
             for entry in log.entries {
                 let time = entry.date.formatted(date: .abbreviated, time: .standard)
                 let detail = entry.detail.map { " [\($0)]" } ?? ""
-                lines.append("• \(time) · \(entry.source.rawValue): \(entry.message)\(detail)")
+                lines.append("• \(time) · \(entry.source.title): \(entry.message)\(detail)")
             }
         }
         return lines.joined(separator: "\n")

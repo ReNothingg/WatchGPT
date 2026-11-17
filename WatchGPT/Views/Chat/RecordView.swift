@@ -218,8 +218,8 @@ private struct RecordingStatus: View {
     }
 
     private var statusText: String {
-        if recorder.isPaused { return "пауза" }
-        return recorder.heardSpeech ? "слушаю" : "говорите"
+        if recorder.isPaused { return String(localized: "пауза") }
+        return recorder.heardSpeech ? String(localized: "слушаю") : String(localized: "говорите")
     }
 
     private func timeString(_ t: TimeInterval) -> String {
@@ -233,7 +233,7 @@ private struct TranscribingLabel: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            ShimmerText(text: "Распознаю", font: .system(size: 15, weight: .semibold, design: .rounded), base: .white.opacity(0.75))
+            ShimmerText(text: String(localized: "Распознаю"), font: .system(size: 15, weight: .semibold, design: .rounded), base: .white.opacity(0.75))
             Text(engineHint)
                 .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)

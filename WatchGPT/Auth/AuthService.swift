@@ -14,7 +14,7 @@ final class AuthService {
 
     enum AuthError: LocalizedError {
         case signedOut
-        var errorDescription: String? { "Сессия ChatGPT истекла. Подключите аккаунт заново." }
+        var errorDescription: String? { String(localized: "Сессия ChatGPT истекла. Подключите аккаунт заново.") }
     }
 
     private static let keychainAccount = "chatgpt.tokens"
@@ -83,7 +83,7 @@ final class AuthService {
         } catch {
             guard claudeKey?.key == key else { return }
             claudeKeyCheck = .invalid(error.localizedDescription)
-            DiagnosticsLog.shared.record(.answer, message: "Ключ Anthropic не прошёл проверку", detail: error.localizedDescription)
+            DiagnosticsLog.shared.record(.answer, message: String(localized: "Ключ Anthropic не прошёл проверку"), detail: error.localizedDescription)
         }
     }
 
@@ -109,10 +109,10 @@ final class AuthService {
             return key
         } catch OAuth.Failure.noAPIOrganization {
             apiKeyError = OAuth.Failure.noAPIOrganization.errorDescription
-            DiagnosticsLog.shared.record(.voice, message: "API-ключ не выдан: нет API-организации во входе ChatGPT", detail: "organization_id")
+            DiagnosticsLog.shared.record(.voice, message: String(localized: "API-ключ не выдан: нет API-организации во входе ChatGPT"), detail: "organization_id")
             throw OAuth.Failure.noAPIOrganization
         } catch {
-            apiKeyError = "Не удалось получить API-ключ автоматически: \(error.localizedDescription)"
+            apiKeyError = String(localized: "Не удалось получить API-ключ автоматически: \(error.localizedDescription)")
             DiagnosticsLog.shared.record(.voice, error)
             throw error
         }
@@ -149,16 +149,16 @@ final class AuthService {
                 keyCheck = .valid
                 return
             }
-            let message = OAuth.readableMessage(String(decoding: data, as: UTF8.self)).prefix(140)
+            let message = String(OAuth.readableMessage(String(decoding: data, as: UTF8.self)).prefix(140))
             switch status {
-            case 401: keyCheck = .invalid("Ключ не подходит. \(message)")
-            case 403, 404: keyCheck = .invalid("Нет доступа к gpt-transcribe в этом проекте. \(message)")
-            default: keyCheck = .invalid("Ошибка проверки (\(status)). \(message)")
+            case 401: keyCheck = .invalid(String(localized: "Ключ не подходит. \(message)"))
+            case 403, 404: keyCheck = .invalid(String(localized: "Нет доступа к gpt-transcribe в этом проекте. \(message)"))
+            default: keyCheck = .invalid(String(localized: "Ошибка проверки (\(status)). \(message)"))
             }
-            DiagnosticsLog.shared.record(.voice, message: "API-ключ не прошёл проверку", detail: "HTTP \(status)")
+            DiagnosticsLog.shared.record(.voice, message: String(localized: "API-ключ не прошёл проверку"), detail: "HTTP \(status)")
         } catch {
             guard apiKey?.key == key else { return }
-            keyCheck = .invalid("Не удалось проверить: \(error.localizedDescription)")
+            keyCheck = .invalid(String(localized: "Не удалось проверить: \(error.localizedDescription)"))
         }
     }
 

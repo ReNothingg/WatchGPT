@@ -8,9 +8,9 @@ enum ClientVersion {
 
         var label: String {
             switch self {
-            case .bundled: return "из сборки"
-            case .github: return "с GitHub"
-            case .manual: return "вручную"
+            case .bundled: return String(localized: "из сборки")
+            case .github: return String(localized: "с GitHub")
+            case .manual: return String(localized: "вручную")
             }
         }
     }

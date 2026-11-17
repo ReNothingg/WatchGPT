@@ -42,8 +42,8 @@ enum LimitReminder {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "Лимит восстановлен"
-        content.body = "Можно снова спрашивать ChatGPT."
+        content.title = String(localized: "Лимит восстановлен")
+        content.body = String(localized: "Можно снова спрашивать ChatGPT.")
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)

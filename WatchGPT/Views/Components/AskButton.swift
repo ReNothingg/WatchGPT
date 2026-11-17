@@ -135,8 +135,8 @@ struct UsageArc: View {
     }
 
     static func label(_ usage: UsageSnapshot?) -> String {
-        guard let left = usage?.tightest()?.remainingPercent() else { return "Лимиты загружаются" }
-        return "Лимиты, осталось \(Theme.percent(left))"
+        guard let left = usage?.tightest()?.remainingPercent() else { return String(localized: "Лимиты загружаются") }
+        return String(localized: "Лимиты, осталось \(Theme.percent(left))")
     }
 }
 

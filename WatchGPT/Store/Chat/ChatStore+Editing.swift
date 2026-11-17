@@ -20,7 +20,7 @@ extension ChatStore {
         submit(text, versions: versions, versionIndex: versions.count - 1, images: head.images)
     }
 
-    static let reportedPlaceholder = "Ответ скрыт по вашей жалобе."
+    static let reportedPlaceholder = String(localized: "Ответ скрыт по вашей жалобе.")
 
     func reportAnswer(_ id: UUID) {
         guard !isBusy, let index = messages.firstIndex(where: { $0.id == id && $0.role == .assistant }) else { return }
@@ -29,7 +29,7 @@ extension ChatStore {
         messages[index].text = Self.reportedPlaceholder
         saveConversation()
         publishWidget()
-        DiagnosticsLog.shared.record(.answer, message: "Пользователь пожаловался на ответ", detail: messages[index].claude == true ? "Claude" : "ChatGPT")
+        DiagnosticsLog.shared.record(.answer, message: String(localized: "Пользователь пожаловался на ответ"), detail: messages[index].claude == true ? "Claude" : "ChatGPT")
     }
 
     func switchVersion(_ id: UUID, by step: Int) {

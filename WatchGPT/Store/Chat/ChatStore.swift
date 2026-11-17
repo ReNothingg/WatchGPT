@@ -62,6 +62,12 @@ final class ChatStore {
     var autoSpeak: Bool { didSet { defaults.set(autoSpeak, forKey: Keys.autoSpeak) } }
     var conciseAnswers: Bool { didSet { defaults.set(conciseAnswers, forKey: Keys.concise) } }
     var fastMode: Bool { didSet { defaults.set(fastMode, forKey: Keys.fast) } }
+    var answerNotifications: Bool {
+        didSet {
+            defaults.set(answerNotifications, forKey: Keys.answerNotifications)
+            if answerNotifications { AnswerNotifier.prepare() }
+        }
+    }
     var handoff: Bool { didSet { defaults.set(handoff, forKey: Handoff.defaultsKey) } }
     var answerFontScale: Double { didSet { defaults.set(answerFontScale, forKey: Keys.answerFontScale) } }
     var quickPrompts: [QuickPrompt] {
@@ -153,6 +159,7 @@ final class ChatStore {
         autoSpeak = d.object(forKey: Keys.autoSpeak) as? Bool ?? false
         conciseAnswers = d.object(forKey: Keys.concise) as? Bool ?? true
         fastMode = d.object(forKey: Keys.fast) as? Bool ?? false
+        answerNotifications = d.object(forKey: Keys.answerNotifications) as? Bool ?? true
         handoff = d.object(forKey: Handoff.defaultsKey) as? Bool ?? true
         voiceEngine = d.string(forKey: Keys.voiceEngine).flatMap(VoiceEngine.init(rawValue:)) ?? .auto
         transcribeModel = d.string(forKey: Keys.transcribeModel).flatMap(TranscribeModel.init(rawValue:)) ?? .best

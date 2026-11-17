@@ -183,8 +183,8 @@ struct AnswerWidgetView: View {
 
 extension WidgetAnswer {
     static let preview = WidgetAnswer(
-        question: "Сколько будет 15% от 240?",
-        answer: "36. Чтобы найти 15%, умножьте 240 на 0,15.",
+        question: String(localized: "Сколько будет 15% от 240?"),
+        answer: String(localized: "36. Чтобы найти 15%, умножьте 240 на 0,15."),
         date: .now,
         chatID: ""
     )

@@ -11,7 +11,7 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 HStack(spacing: gap) {
-                    HomeSideButton(icon: "clock.arrow.circlepath", route: .history, label: "История", size: side)
+                    HomeSideButton(icon: "clock.arrow.circlepath", route: .history, label: String(localized: "История"), size: side)
                         .offset(x: appeared ? 0 : 24)
                         .opacity(appeared ? 1 : 0)
                     AskButton(size: mic, halo: true, showsUsage: true, showsUsageBadge: true)

@@ -27,7 +27,7 @@ extension ChatStore {
         await task?.value
 
         guard let reply = messages.last, reply.role == .assistant, !reply.text.isEmpty else {
-            throw SiriAskError.failed("Ответ не получен. Попробуйте ещё раз.")
+            throw SiriAskError.failed(String(localized: "Ответ не получен. Попробуйте ещё раз."))
         }
         if reply.isError { throw SiriAskError.failed(reply.text) }
         return reply.text
@@ -73,6 +73,7 @@ extension ChatStore {
         status = .thinking
         defaults.set(conversationID, forKey: Keys.resumableChatID)
         WKInterfaceDevice.current().play(.start)
+        if answerNotifications, !siriRequest { AnswerNotifier.prepare() }
 
         sendTask = Task { [weak self] in
             await self?.generate(replyID: reply.id)
@@ -106,6 +107,7 @@ extension ChatStore {
 
     func sceneBecameActive() {
         isInBackground = false
+        AnswerNotifier.clear()
         updateKeepAlive()
         if isBusy {
             guard interruptedInBackground, !didAutoResume,

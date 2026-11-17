@@ -13,9 +13,9 @@ struct CodeBlockView: View {
     }
 
     private var title: String {
-        if sentToPhone { return "Открой на iPhone" }
-        let name = language.isEmpty ? "Код" : language
-        return "\(name) · \(lineCount) \(Self.linesWord(lineCount))"
+        if sentToPhone { return String(localized: "Открой на iPhone") }
+        let name = language.isEmpty ? String(localized: "Код") : language
+        return "\(name) · " + String(localized: "\(lineCount) строк")
     }
 
     var body: some View {
@@ -69,12 +69,5 @@ struct CodeBlockView: View {
             try? await Task.sleep(for: .seconds(3))
             sentToPhone = false
         }
-    }
-
-    private static func linesWord(_ n: Int) -> String {
-        let mod10 = n % 10, mod100 = n % 100
-        if mod10 == 1, mod100 != 11 { return "строка" }
-        if (2...4).contains(mod10), !(12...14).contains(mod100) { return "строки" }
-        return "строк"
     }
 }

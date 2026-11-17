@@ -49,7 +49,7 @@ struct UsageHistoryChart: View {
             }
             .frame(height: 70)
             Text(total > 0
-                 ? "За 7 дней \(Theme.percent(total)) · \(weekly ? "доля недельного лимита" : "доля окна «\(windowLabel)»")"
+                 ? "За 7 дней \(Theme.percent(total)) · \(weekly ? String(localized: "доля недельного лимита") : String(localized: "доля окна «\(windowLabel)»"))"
                  : "Пока нет данных: расход копится, пока приложение получает лимиты.")
                 .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)

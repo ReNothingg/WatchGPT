@@ -68,9 +68,9 @@ struct GPTHistorySections: View {
     }
 
     private var footerText: String {
-        let note = "Продолжение на часах сохраняется только на часах."
+        let note = String(localized: "Продолжение на часах сохраняется только на часах.")
         guard let syncedAt = history.syncedAt else { return note }
-        return "Обновлено \(ChatDate.short(syncedAt).lowercased()). \(note)"
+        return String(localized: "Обновлено \(ChatDate.short(syncedAt).lowercased()). \(note)")
     }
 
     @ViewBuilder
@@ -87,7 +87,7 @@ struct GPTHistorySections: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
         } else {
-            EmptyHistory(icon: "sparkles", title: "Пока пусто", subtitle: "В аккаунте ChatGPT ещё нет чатов")
+            EmptyHistory(icon: "sparkles", title: String(localized: "Пока пусто"), subtitle: String(localized: "В аккаунте ChatGPT ещё нет чатов"))
         }
     }
 

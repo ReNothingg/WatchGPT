@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AnthropicAPIKey</key>
+	<string>$(ANTHROPIC_API_KEY)</string>
 	<key>AppGroupID</key>
 	<string>$(APP_GROUP)</string>
 	<key>CFBundleDevelopmentRegion</key>
@@ -39,6 +41,8 @@
 	<string>Геопозиция нужна, чтобы запомнить место и поднимать виджет WatchGPT в смарт-стопке, когда вы там.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон нужен, чтобы вы могли задавать вопросы голосом.</string>
+	<key>OpenAIAPIKey</key>
+	<string>$(OPENAI_API_KEY)</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>watchgpt.chat</string>

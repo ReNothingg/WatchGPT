@@ -170,6 +170,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C0F1D0B0C0F1D0B000000001 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		AC76A06B93A49228D9110A09 /* LimitsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsWidget.swift; sourceTree = "<group>"; };
 		1E3C267EB4CF05B266C9BF4D /* WidgetStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStyle.swift; sourceTree = "<group>"; };
 		96FF406C7C438B2F67ABAD91 /* AskWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskWidget.swift; sourceTree = "<group>"; };
@@ -636,7 +637,16 @@
 				3343748D4558C94F3EEEBC00 /* WatchGPT */,
 				2BA3B51E5402096361BDA99B /* WatchGPTWidget */,
 				C809EDFC8EA48899AA45A337 /* Products */,
+				C0F1D0B0C0F1D0B000000002 /* Config */,
 			);
+			sourceTree = "<group>";
+		};
+		C0F1D0B0C0F1D0B000000002 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				C0F1D0B0C0F1D0B000000001 /* Debug.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		FF5C4CCCCFB9CD0CAACB1102 /* Shared */ = {
@@ -1096,6 +1106,7 @@
 		};
 		D34AF350EB64ED74449156E7 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0F1D0B0C0F1D0B000000001 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

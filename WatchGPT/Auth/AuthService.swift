@@ -1,3 +1,6 @@
+#if DEBUG
+import CryptoKit
+#endif
 import Foundation
 import Observation
 
@@ -55,7 +58,35 @@ final class AuthService {
         phase = stored == nil ? .signedOut : .signedIn
         apiKey = Keychain.load(StoredAPIKey.self, account: Self.apiKeyAccount)
         claudeKey = Keychain.load(StoredAPIKey.self, account: Self.claudeKeyAccount)
+        #if DEBUG
+        applyBuildKeys()
+        #endif
     }
+
+    #if DEBUG
+    private func applyBuildKeys() {
+        if let key = Self.buildKey("OpenAIAPIKey", prefix: "sk-", marker: "apikey.bundledFingerprint") {
+            setAPIKey(StoredAPIKey(key: key, isManual: true))
+            apiKeyError = nil
+            Task { await self.verifyAPIKey() }
+        }
+        if let key = Self.buildKey("AnthropicAPIKey", prefix: "sk-ant-", marker: "claudekey.bundledFingerprint") {
+            setClaudeKey(StoredAPIKey(key: key, isManual: true))
+            Task { await self.verifyClaudeKey() }
+        }
+    }
+
+    private static func buildKey(_ infoKey: String, prefix: String, marker: String) -> String? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: infoKey) as? String else { return nil }
+        let key = raw.filter { !$0.isWhitespace && $0 != "\"" }
+        guard key.hasPrefix(prefix) else { return nil }
+        let fingerprint = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: marker) != fingerprint else { return nil }
+        defaults.set(fingerprint, forKey: marker)
+        return key
+    }
+    #endif
 
     func setManualClaudeKey(_ raw: String) {
         let key = raw.filter { !$0.isWhitespace && $0 != "\"" && $0 != "'" }

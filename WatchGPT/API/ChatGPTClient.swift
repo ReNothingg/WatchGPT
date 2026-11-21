@@ -34,11 +34,69 @@ struct ChatGPTClient: Sendable {
         case responseStarted
         case textDelta(String)
         case thinkingDelta(String)
+        case reasoningPart(ReasoningPart)
         case source(ChatMessage.Source)
         case stopped(ChatMessage.StopNote)
         case searching
         case usage(UsageSnapshot)
         case completed
+    }
+
+    struct ReasoningPart: Sendable {
+        let outputIndex: Int
+        let summaryIndex: Int
+        let text: String
+        let replacesText: Bool
+
+        init(outputIndex: Int, summaryIndex: Int, text: String, replacesText: Bool) {
+            self.outputIndex = outputIndex
+            self.summaryIndex = summaryIndex
+            self.text = text
+            self.replacesText = replacesText
+        }
+
+        init?(event: [String: Any], type: String) {
+            let isDelta = type == "response.reasoning_summary_text.delta"
+            let part = event["part"] as? [String: Any]
+            let text = isDelta ? event["delta"] as? String : event["text"] as? String ?? part?["text"] as? String
+            guard let text, !text.isEmpty else { return nil }
+            self.init(
+                outputIndex: event["output_index"] as? Int ?? 0,
+                summaryIndex: event["summary_index"] as? Int ?? 0,
+                text: text,
+                replacesText: !isDelta
+            )
+        }
+
+        static func fromItem(_ item: [String: Any], at outputIndex: Int) -> [Self] {
+            guard item["type"] as? String == "reasoning",
+                  let summary = item["summary"] as? [[String: Any]] else { return [] }
+            return summary.enumerated().compactMap { index, part in
+                guard part["type"] as? String == "summary_text",
+                      let text = part["text"] as? String, !text.isEmpty else { return nil }
+                return Self(outputIndex: outputIndex, summaryIndex: index, text: text, replacesText: true)
+            }
+        }
+    }
+
+    struct ReasoningParts {
+        private var items: [Int: [Int: String]] = [:]
+
+        mutating func apply(_ part: ReasoningPart) -> Bool {
+            let existing = items[part.outputIndex]?[part.summaryIndex] ?? ""
+            let text = part.replacesText ? part.text : existing + part.text
+            guard existing != text else { return false }
+            items[part.outputIndex, default: [:]][part.summaryIndex] = text
+            return true
+        }
+
+        var text: String {
+            items.keys.sorted().flatMap { index -> [String] in
+                let parts = items[index] ?? [:]
+                return parts.keys.sorted().compactMap { parts[$0] }
+            }
+            .joined(separator: "\n\n")
+        }
     }
 
     struct Options: Sendable {
@@ -70,10 +128,14 @@ struct ChatGPTClient: Sendable {
         "response.output_text.delta",
         "response.output_text.done",
         "response.output_item.added",
+        "response.output_item.done",
         "response.output_text.annotation.added",
         "response.reasoning_summary_text.delta",
+        "response.reasoning_summary_text.done",
         "response.reasoning_summary_part.added",
+        "response.reasoning_summary_part.done",
         "response.incomplete",
+        "response.completed",
         "codex.rate_limits",
         "response.failed",
         "error",
@@ -120,17 +182,12 @@ struct ChatGPTClient: Sendable {
         }
 
         var sawText = false
-        var sawThinking = false
         for try await line in bytes.lines {
             try Task.checkCancellation()
             guard line.hasPrefix("data:") else { continue }
             let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
             if payload == "[DONE]" { break }
             if let quick = Self.quickType(payload) {
-                if quick == "response.completed" {
-                    continuation.yield(.completed)
-                    return
-                }
                 if !Self.parsedTypes.contains(quick) { continue }
                 if quick == "response.output_text.done", sawText { continue }
             }
@@ -153,28 +210,38 @@ struct ChatGPTClient: Sendable {
                 if let item = event["item"] as? [String: Any], (item["type"] as? String) == "web_search_call" {
                     continuation.yield(.searching)
                 }
+            case "response.output_item.done":
+                if let item = event["item"] as? [String: Any], let index = event["output_index"] as? Int {
+                    for part in ReasoningPart.fromItem(item, at: index) {
+                        continuation.yield(.reasoningPart(part))
+                    }
+                }
             case "response.output_text.annotation.added":
                 let annotation = event["annotation"] as? [String: Any]
                 if (annotation?["type"] as? String) == "url_citation",
                    let source = ChatMessage.Source(url: annotation?["url"] as? String, title: annotation?["title"] as? String) {
                     continuation.yield(.source(source))
                 }
-            case "response.reasoning_summary_part.added":
-                if sawThinking { continuation.yield(.thinkingDelta("\n\n")) }
-            case "response.reasoning_summary_text.delta":
-                if let delta = event["delta"] as? String, !delta.isEmpty {
-                    sawThinking = true
-                    continuation.yield(.thinkingDelta(delta))
+            case "response.reasoning_summary_part.added", "response.reasoning_summary_part.done",
+                 "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done":
+                if let part = ReasoningPart(event: event, type: type) {
+                    continuation.yield(.reasoningPart(part))
                 }
             case "codex.rate_limits":
                 if let usage = Self.usage(fromEvent: event) { continuation.yield(.usage(usage)) }
-            case "response.incomplete":
+            case "response.incomplete", "response.completed":
                 let response = event["response"] as? [String: Any]
-                let reason = (response?["incomplete_details"] as? [String: Any])?["reason"] as? String
-                continuation.yield(.stopped(reason == "content_filter" ? .filtered : .maxTokens))
-                continuation.yield(.completed)
-                return
-            case "response.completed":
+                if let output = response?["output"] as? [[String: Any]] {
+                    for (index, item) in output.enumerated() {
+                        for part in ReasoningPart.fromItem(item, at: index) {
+                            continuation.yield(.reasoningPart(part))
+                        }
+                    }
+                }
+                if type == "response.incomplete" {
+                    let reason = (response?["incomplete_details"] as? [String: Any])?["reason"] as? String
+                    continuation.yield(.stopped(reason == "content_filter" ? .filtered : .maxTokens))
+                }
                 continuation.yield(.completed)
                 return
             case "response.failed":

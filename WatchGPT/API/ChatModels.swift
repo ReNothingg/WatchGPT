@@ -76,7 +76,6 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     }
 
     static let maxSources = 12
-    static let maxReasoning = 12_000
 
     var id = UUID()
     var role: Role

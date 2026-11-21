@@ -107,7 +107,6 @@ extension ChatStore {
 
     func sceneBecameActive() {
         isInBackground = false
-        AnswerNotifier.clear()
         updateKeepAlive()
         if isBusy {
             guard interruptedInBackground, !didAutoResume,

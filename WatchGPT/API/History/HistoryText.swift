@@ -16,7 +16,7 @@ enum HistoryText {
         return String(cleaned.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
     }
 
-    static func clean(_ text: String) -> String {
+    static func clean(_ text: String, clipped: Bool = true) -> String {
         var s = replace(citations, in: replace(entities, in: text, with: ""), with: "")
         s.unicodeScalars.removeAll { (0xE000...0xF8FF).contains($0.value) }
 
@@ -52,7 +52,7 @@ enum HistoryText {
 
         let joined = replace(blankRuns, in: lines.joined(separator: "\n"), with: "\n\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return clip(joined)
+        return clipped ? clip(joined) : joined
     }
 
     private static let entities = regex("\u{E200}[^\u{E201}]*\u{E201}")

@@ -135,7 +135,7 @@ extension ChatGPTClient {
                 let summary = thought["summary"] as? String ?? ""
                 var body = thought["content"] as? String ?? ""
                 if body.isEmpty, let chunks = thought["chunks"] as? [String] { body = chunks.joined(separator: " ") }
-                reasoning.add(title: HistoryText.plain(summary, limit: 120), detail: HistoryText.plain(body, limit: 1200))
+                reasoning.add(title: HistoryText.clean(summary, clipped: false), detail: HistoryText.clean(body, clipped: false))
             }
         case "reasoning_recap":
             if reasoning.seconds == nil {

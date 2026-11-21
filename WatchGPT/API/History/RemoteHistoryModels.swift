@@ -42,8 +42,6 @@ struct Reasoning: Equatable, Sendable {
 
     var isEmpty: Bool { steps.isEmpty && seconds == nil }
 
-    static let maxSteps = 40
-
     mutating func add(title: String, detail: String, icon: String? = nil) {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,7 +51,6 @@ struct Reasoning: Equatable, Sendable {
             return
         }
         steps.append(ReasoningStep(id: (steps.last?.id ?? -1) + 1, title: title, detail: detail, icon: icon))
-        if steps.count > Self.maxSteps { steps.removeFirst(steps.count - Self.maxSteps) }
     }
 
     private static func sameText(_ a: String, _ b: String) -> Bool {

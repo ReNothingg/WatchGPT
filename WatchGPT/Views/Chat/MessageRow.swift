@@ -31,6 +31,7 @@ extension AnyTransition {
 struct MessageRow: View, Equatable {
     @Environment(ChatStore.self) private var store
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    @State private var showingReasoning = false
     let message: ChatMessage
     let isLast: Bool
     let fontScale: Double
@@ -42,6 +43,13 @@ struct MessageRow: View, Equatable {
     var body: some View {
         content
             .animation(.easeOut(duration: 0.3), value: message.text.isEmpty)
+            .sheet(isPresented: $showingReasoning) {
+                MessageReasoningReader(messageID: message.id)
+            }
+    }
+
+    private var reasoningSteps: [ReasoningStep] {
+        ReasoningFormat.steps(from: message.reasoning ?? "")
     }
 
     @ViewBuilder
@@ -91,21 +99,33 @@ struct MessageRow: View, Equatable {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ThinkingIndicator(label: searching ? String(localized: "Ищу в интернете") : String(localized: "Думаю"), searching: searching)
-                        if let reasoning = message.reasoning, !reasoning.isEmpty {
-                            LiveThought(reasoning: reasoning)
-                                .transition(.opacity)
-                        }
+                    ReasoningDisclosure(
+                        title: searching ? String(localized: "Ищу в интернете") : String(localized: "Готовлю ответ"),
+                        icon: searching ? "globe" : "sparkles",
+                        steps: reasoningSteps,
+                        fontScale: fontScale,
+                        showsLatest: true,
+                        isActive: true
+                    ) {
+                        showingReasoning = true
                     }
-                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+                    .transition(.opacity)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    if let reasoning = message.reasoning, !reasoning.isEmpty {
-                        AnswerReasoning(text: reasoning, seconds: message.thinkingSeconds)
+                    let steps = reasoningSteps
+                    if !steps.isEmpty {
+                        ReasoningDisclosure(
+                            title: ReasoningFormat.title(seconds: message.thinkingSeconds),
+                            icon: "sparkles",
+                            steps: steps,
+                            fontScale: fontScale
+                        ) {
+                            showingReasoning = true
+                        }
                     }
                     MarkdownText(text: message.text, scale: fontScale, live: isLast && store.status == .streaming)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .environment(\.tableLongPress, rewriteWithoutTables)
                         .environment(\.codeLongPress) { code, language in store.handOffCode(code, language: language) }
@@ -140,6 +160,20 @@ struct MessageRow: View, Equatable {
                 .animation(.easeOut(duration: 0.25), value: isLast && store.canRefine)
             }
         }
+    }
+}
+
+private struct MessageReasoningReader: View {
+    @Environment(ChatStore.self) private var store
+    let messageID: UUID
+
+    var body: some View {
+        let message = store.messages.first { $0.id == messageID }
+        ReasoningReader(
+            steps: ReasoningFormat.steps(from: message?.reasoning ?? ""),
+            fontScale: store.answerFontScale,
+            isActive: store.isBusy && store.messages.last?.id == messageID
+        )
     }
 }
 

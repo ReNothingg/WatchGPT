@@ -1,165 +1,201 @@
 import SwiftUI
 
 struct ReasoningSummary: View {
+    @Environment(ChatStore.self) private var store
+    @State private var showingDetails = false
     let reasoning: Reasoning
-    @State private var expanded = false
-
-    private var label: String {
-        if let seconds = reasoning.seconds { return String(localized: "Думал \(ReasoningFormat.duration(seconds))") }
-        let tools = reasoning.steps.filter { $0.icon != nil }
-        if !tools.isEmpty, tools.count == reasoning.steps.count {
-            var names: [String] = []
-            for step in tools {
-                let name = step.title.components(separatedBy: ":").first ?? step.title
-                if !names.contains(name) { names.append(name) }
-            }
-            return tools.count == 1 ? tools[0].title : String(localized: "Использовано: \(names.prefix(2).joined(separator: ", "))")
-        }
-        return String(localized: "Рассуждения")
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ThinkingHeader(expandable: !reasoning.steps.isEmpty, expanded: $expanded) {
-                Text(label)
-                    .font(.footnote)
-                    .foregroundStyle(Theme.secondaryText)
-            }
-
-            if expanded {
-                ReasoningSteps(steps: reasoning.steps)
-                    .transition(.opacity.combined(with: .offset(y: -4)))
-            }
+        let singleStep = reasoning.steps.count == 1 ? reasoning.steps.first : nil
+        let tool = reasoning.seconds == nil && singleStep?.icon != nil ? singleStep : nil
+        ReasoningDisclosure(
+            title: tool?.title ?? ReasoningFormat.title(seconds: reasoning.seconds),
+            icon: singleStep?.icon ?? "sparkles",
+            steps: reasoning.steps,
+            fontScale: store.answerFontScale
+        ) {
+            showingDetails = true
+        }
+        .sheet(isPresented: $showingDetails) {
+            ReasoningReader(steps: reasoning.steps, fontScale: store.answerFontScale)
         }
     }
 }
 
-struct ThinkingHeader<Label: View>: View {
-    var expandable: Bool
-    @Binding var expanded: Bool
-    @ViewBuilder var label: () -> Label
-
-    var body: some View {
-        Button {
-            guard expandable else { return }
-            WKHaptics.click()
-            withAnimation(.snappy(duration: 0.3)) { expanded.toggle() }
-        } label: {
-            HStack(spacing: 4) {
-                label()
-                if expandable {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(Theme.secondaryText)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-            }
-            .lineLimit(1)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PressableStyle(scale: 0.96))
-        .disabled(!expandable)
-    }
-}
-
-struct ReasoningSteps: View {
+struct ReasoningDisclosure: View {
+    let title: String
+    let icon: String
     let steps: [ReasoningStep]
-    var collapsedLines = 2
+    let fontScale: Double
+    var showsLatest = false
+    var isActive = false
+    var startedAt: Date?
+    let open: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ForEach(steps) { step in
-                if step.icon != nil {
-                    ToolRow(step: step)
-                } else {
-                    ThoughtRow(step: step, collapsedLines: collapsedLines)
+        Group {
+            if steps.isEmpty {
+                label
+            } else {
+                Button {
+                    WKHaptics.click()
+                    open()
+                } label: {
+                    label
+                }
+                .buttonStyle(PressableStyle(scale: 0.98))
+                .accessibilityHint("Открывает все шаги ответа")
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: showsLatest ? steps.last?.id : nil)
+    }
+
+    private var label: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            header
+            if showsLatest, let latest = steps.last {
+                let text = latest.title.isEmpty || latest.title == title ? latest.detail : latest.title
+                if let firstLine = text.split(whereSeparator: \.isNewline).first {
+                    MarkdownText(text: String(firstLine), scale: fontScale, live: isActive)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .padding(.leading, 21)
+                        .id(latest.id)
+                        .transition(.opacity)
                 }
             }
         }
-        .padding(.leading, 10)
-        .overlay(alignment: .leading) {
-            Capsule()
-                .fill(Theme.track)
-                .frame(width: 2)
-                .padding(.vertical, 2)
-        }
-    }
-}
-
-struct ThoughtRow: View {
-    let step: ReasoningStep
-    var collapsedLines: Int
-    @State private var open = false
-
-    private var title: String { step.title.replacingOccurrences(of: "**", with: "") }
-
-    private var paragraphs: [String] {
-        step.detail.components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
-    private var canOpen: Bool {
-        paragraphs.count > 1 || (paragraphs.first?.count ?? 0) > collapsedLines * 30
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if !title.isEmpty {
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(ReasoningPalette.title)
-            }
-            if let first = paragraphs.first {
-                MarkdownText(text: open ? step.detail : first, style: .caption2)
-                    .foregroundStyle(ReasoningPalette.text)
-                    .lineLimit(open ? nil : collapsedLines)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .onTapGesture {
-            guard canOpen else { return }
-            WKHaptics.click()
-            withAnimation(.snappy(duration: 0.25)) { open.toggle() }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .medium))
+                .frame(width: 15)
+                .symbolEffect(.pulse, isActive: isActive && !reduceMotion)
+                .accessibilityHidden(true)
+            MarkdownText(text: title, scale: fontScale)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let startedAt {
+                Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
+                    .font(.caption2.monospacedDigit())
+                    .fixedSize()
+            }
+            if !steps.isEmpty {
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 8, weight: .semibold))
+                    .accessibilityHidden(true)
+            }
         }
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.leading)
+        .frame(minHeight: 32)
+        .accessibilityElement(children: .combine)
     }
 }
 
-struct ToolRow: View {
-    let step: ReasoningStep
+struct ReasoningReader: View {
+    let steps: [ReasoningStep]
+    let fontScale: Double
+    var isActive = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Image(systemName: step.icon ?? "wrench.and.screwdriver")
-                .font(.system(size: 9, weight: .semibold))
-                .frame(width: 12)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(step.title)
-                    .font(.caption2.weight(.medium))
-                    .lineLimit(1)
-                if !step.detail.isEmpty {
-                    Text(step.detail.replacingOccurrences(of: "\n", with: " · "))
-                        .font(.caption2)
-                        .foregroundStyle(ReasoningPalette.faint)
-                        .lineLimit(1)
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(steps) { step in
+                        if step.id != steps.first?.id {
+                            Divider()
+                                .accessibilityHidden(true)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            if !step.title.isEmpty {
+                                MarkdownText(text: step.title, scale: fontScale)
+                            }
+                            if !step.detail.isEmpty {
+                                MarkdownText(text: step.detail, scale: fontScale, live: isActive && step.id == steps.last?.id)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 16)
+            }
+            .navigationTitle("Ход ответа")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Закрыть")
                 }
             }
         }
-        .foregroundStyle(ReasoningPalette.text)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .presentationBackground(.black)
     }
-}
-
-enum ReasoningPalette {
-    static let title = Color(white: 0.74)
-    static let text = Theme.secondaryText
-    static let faint = Color(white: 0.42)
 }
 
 enum ReasoningFormat {
-    static func duration(_ seconds: Int) -> String {
+    static func title(seconds: Int?) -> String {
+        guard let seconds else { return String(localized: "Ход ответа") }
+        return String(localized: "Думал \(duration(seconds))")
+    }
+
+    static func steps(from text: String) -> [ReasoningStep] {
+        var steps: [ReasoningStep] = []
+        var title = ""
+        var lines: [Substring] = []
+        var inCode = false
+
+        func appendStep() {
+            let detail = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty || !detail.isEmpty {
+                steps.append(ReasoningStep(id: steps.count, title: title, detail: detail))
+            }
+            title = ""
+            lines.removeAll(keepingCapacity: true)
+        }
+
+        for line in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                inCode.toggle()
+            } else if !inCode {
+                if let heading = heading(trimmed) {
+                    appendStep()
+                    title = heading
+                    continue
+                }
+                if trimmed.isEmpty && title.isEmpty {
+                    appendStep()
+                    continue
+                }
+            }
+            lines.append(line)
+        }
+        appendStep()
+        return steps
+    }
+
+    private static func heading(_ text: String) -> String? {
+        if text.count > 4, text.hasPrefix("**"), text.hasSuffix("**") {
+            let title = text.dropFirst(2).dropLast(2).trimmingCharacters(in: .whitespaces)
+            if !title.isEmpty && !title.contains("**") { return title }
+        }
+        let markers = text.prefix(while: { $0 == "#" }).count
+        guard (1...6).contains(markers), text.dropFirst(markers).first == " " else { return nil }
+        let title = text.dropFirst(markers).trimmingCharacters(in: .whitespaces)
+        return title.isEmpty ? nil : title
+    }
+
+    private static func duration(_ seconds: Int) -> String {
         if seconds < 60 { return String(localized: "\(max(1, seconds)) с") }
         if seconds < 3600 {
             let rest = seconds % 60
@@ -167,9 +203,5 @@ enum ReasoningFormat {
         }
         let minutes = (seconds % 3600) / 60
         return minutes == 0 ? String(localized: "\(seconds / 3600) ч") : String(localized: "\(seconds / 3600) ч \(minutes) мин")
-    }
-
-    static func steps(_ count: Int) -> String {
-        String(localized: "\(count) шагов")
     }
 }

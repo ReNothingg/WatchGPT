@@ -42,19 +42,33 @@ extension ChatStore {
 
                 var pending = ""
                 var pendingThinking = ""
+                var reasoningParts = ChatGPTClient.ReasoningParts()
+                var reasoningChanged = false
+                let previousReasoning = messages.first(where: { $0.id == replyID })?.reasoning
                 var thinkingStarted: ContinuousClock.Instant?
                 var shownLength = 0
                 var lastFlush = ContinuousClock.now - .seconds(1)
                 var interval = Self.flushInterval(length: 0)
                 var lastIntervalCheck = ContinuousClock.now
                 func flushThinking() {
-                    guard !pendingThinking.isEmpty else { return }
+                    guard reasoningChanged || !pendingThinking.isEmpty else { return }
+                    let summary = reasoningChanged ? reasoningParts.text : nil
+                    reasoningChanged = false
                     let chunk = pendingThinking
                     pendingThinking = ""
                     lastFlush = .now
                     update(replyID) {
-                        let current = $0.reasoning ?? ""
-                        if current.count < ChatMessage.maxReasoning { $0.reasoning = current + chunk }
+                        if let summary {
+                            if let previousReasoning, previousReasoning.hasPrefix(summary) {
+                                $0.reasoning = previousReasoning
+                            } else if let previousReasoning, !summary.hasPrefix(previousReasoning) {
+                                $0.reasoning = previousReasoning + "\n\n" + summary
+                            } else {
+                                $0.reasoning = summary
+                            }
+                        } else {
+                            $0.reasoning = ($0.reasoning ?? "") + chunk
+                        }
                     }
                     keepAlive.hold()
                 }
@@ -102,6 +116,11 @@ extension ChatStore {
                             if thinkingStarted == nil, status != .streaming { thinkingStarted = .now }
                             pendingThinking += delta
                             if ContinuousClock.now - lastFlush >= interval { flushThinking() }
+                        case let .reasoningPart(part):
+                            guard reasoningParts.apply(part) else { break }
+                            if thinkingStarted == nil, status != .streaming { thinkingStarted = .now }
+                            reasoningChanged = true
+                            if ContinuousClock.now - lastFlush >= interval { flushThinking() }
                         case let .source(source):
                             update(replyID) {
                                 var sources = $0.sources ?? []
@@ -125,6 +144,7 @@ extension ChatStore {
                     flush()
                     throw error
                 }
+                try Task.checkCancellation()
 
                 if text(of: replyID).isEmpty {
                     let stop = messages.last { $0.id == replyID }?.stop
@@ -136,8 +156,7 @@ extension ChatStore {
                 } else {
                     DiagnosticsLog.shared.markSuccess()
                     widgetAnswer = makeWidgetAnswer(replyID: replyID, chatID: chatID) ?? widgetAnswer
-                    let notified = await notifyAnswerReady(replyID: replyID, chatID: chatID)
-                    if !notified { WKInterfaceDevice.current().play(.success) }
+                    await notifyAnswerReady(replyID: replyID, chatID: chatID)
                     if autoSpeak && !siriRequest { speaker.speak(text(of: replyID)) }
                 }
                 return
@@ -192,10 +211,10 @@ extension ChatStore {
         return .milliseconds(PowerMonitor.shared.isLowPower ? base * 2 : base)
     }
 
-    func notifyAnswerReady(replyID: UUID, chatID: String) async -> Bool {
-        guard answerNotifications, !siriRequest, WKApplication.shared().applicationState != .active else { return false }
+    func notifyAnswerReady(replyID: UUID, chatID: String) async {
+        guard answerNotifications, !siriRequest else { return }
         let question = messages.last { $0.role == .user }
-        return await AnswerNotifier.post(
+        await AnswerNotifier.signal(
             question: Self.widgetText(question?.refine?.label ?? question?.text ?? "", limit: 60),
             answer: Self.widgetText(text(of: replyID), limit: 180),
             chatID: chatID

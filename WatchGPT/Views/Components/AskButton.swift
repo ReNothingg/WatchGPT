@@ -179,6 +179,7 @@ private struct UsageBadge: View {
 struct MicCircle: View {
     let size: CGFloat
     let halo: Bool
+    var icon = "mic.fill"
 
     var body: some View {
         ZStack {
@@ -191,7 +192,7 @@ struct MicCircle: View {
                     )
                 )
                 .shadow(color: Theme.accent.opacity(halo ? 0.3 : 0.15), radius: halo ? size * 0.16 : 4)
-            Image(systemName: "mic.fill")
+            Image(systemName: icon)
                 .font(.system(size: size * 0.4, weight: .semibold))
                 .foregroundStyle(Theme.onAccent)
         }

@@ -27,7 +27,7 @@ struct ChatView: View {
                                     .transition(message.role == .user ? .userBubble : .reply)
                             }
                         }
-                        .padding(.bottom, 56)
+                        .padding(.bottom, store.isBusy ? 8 : 56)
                         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: MessageListShape(store.messages))
                     }
                     .autoHidesChrome($chromeVisible)
@@ -66,6 +66,18 @@ struct ChatView: View {
                     }
                     .accessibilityLabel("Быстрые вопросы")
                 }
+            } else if store.isBusy {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        store.stop()
+                        WKHaptics.click()
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .accessibilityLabel("Остановить ответ")
+                }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -75,24 +87,11 @@ struct ChatView: View {
                         Image(systemName: "plus")
                             .foregroundStyle(.white)
                     }
-                    .disabled(store.isBusy)
                     .accessibilityLabel("Новый чат")
                 }
                 ToolbarItem(placement: .bottomBar) {
-                    HStack(spacing: 14) {
-                        if photoOnRight {
-                            Color.clear.frame(width: 32, height: 32)
-                        } else {
-                            photoButton
-                        }
-                        AskButton(size: 52, showsUsage: true)
-                        if photoOnRight {
-                            photoButton
-                        } else {
-                            Color.clear.frame(width: 32, height: 32)
-                        }
-                    }
-                    .chromeVisibility(chromeVisible || store.isBusy || !store.pendingImages.isEmpty)
+                    chatActions
+                        .chromeVisibility(chromeVisible || !store.pendingImages.isEmpty)
                 }
             }
         }
@@ -134,9 +133,20 @@ struct ChatView: View {
         WKInterfaceDevice.current().wristLocation == .left
     }
 
-    private var photoButton: some View {
-        PhotoAttachButton(size: 32)
-            .opacity(store.isBusy ? 0 : 1)
+    private var chatActions: some View {
+        HStack(spacing: 14) {
+            if photoOnRight {
+                Color.clear.frame(width: 32, height: 32)
+            } else {
+                PhotoAttachButton(size: 32)
+            }
+            AskButton(size: 52, showsUsage: true)
+            if photoOnRight {
+                PhotoAttachButton(size: 32)
+            } else {
+                Color.clear.frame(width: 32, height: 32)
+            }
+        }
     }
 
     private func reveal(_ id: UUID) {

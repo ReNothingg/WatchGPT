@@ -4,6 +4,7 @@ import WatchKit
 
 @main
 struct WatchGPTApp: App {
+    @WKApplicationDelegateAdaptor(WatchNotificationDelegate.self) private var notificationDelegate
     @State private var auth: AuthService
     @State private var store: ChatStore
     @Environment(\.scenePhase) private var scenePhase

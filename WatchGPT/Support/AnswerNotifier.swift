@@ -1,8 +1,9 @@
 import Foundation
 import UserNotifications
+import WatchKit
 
 enum AnswerNotifier {
-    private static let identifier = "answer.ready"
+    fileprivate static let identifier = "answer.ready"
 
     static func prepare() {
         Task {
@@ -12,15 +13,14 @@ enum AnswerNotifier {
         }
     }
 
-    static func post(question: String, answer: String, chatID: String) async -> Bool {
-        let center = UNUserNotificationCenter.current()
-        switch await center.notificationSettings().authorizationStatus {
-        case .authorized, .provisional:
-            break
-        default:
-            return false
+    @MainActor
+    static func signal(question: String, answer: String, chatID: String) async {
+        guard WKApplication.shared().applicationState != .active else {
+            WKInterfaceDevice.current().play(.notification)
+            return
         }
 
+        let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()
         content.title = question.isEmpty ? String(localized: "Ответ готов") : question
         content.body = answer
@@ -28,17 +28,20 @@ enum AnswerNotifier {
         content.threadIdentifier = chatID
 
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-        do {
-            try await center.add(request)
-            return true
-        } catch {
-            return false
-        }
+        try? await center.add(request)
+    }
+}
+
+final class WatchNotificationDelegate: NSObject, WKApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching() {
+        UNUserNotificationCenter.current().delegate = self
     }
 
-    static func clear() {
-        let center = UNUserNotificationCenter.current()
-        center.removeDeliveredNotifications(withIdentifiers: [identifier])
-        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        guard notification.request.identifier == AnswerNotifier.identifier else { return [] }
+        return [.banner, .list, .sound]
     }
 }

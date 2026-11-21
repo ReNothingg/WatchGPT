@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RecordView: View {
     @Environment(ChatStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
@@ -10,23 +11,13 @@ struct RecordView: View {
         .interactiveDismissDisabled()
     }
 
-    private var isFailed: Bool {
-        if case .failed = store.voicePhase { return true }
-        return false
-    }
-
     private var content: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if !isFailed {
-                LiveGlow()
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-            }
             Group {
                 if case let .failed(message) = store.voicePhase {
                     FailedContent(message: message)
-                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
                 } else {
                     LiveContent()
                         .transition(.opacity)
@@ -62,24 +53,6 @@ private extension ChatStore {
     }
 }
 
-private struct LiveGlow: View {
-    @Environment(ChatStore.self) private var store
-    @State private var ready = false
-
-    var body: some View {
-        ZStack {
-            if ready {
-                EdgeGlow(mode: store.voiceMode) { [recorder = store.recorder] in recorder.level }
-                    .transition(.opacity)
-            }
-        }
-        .task {
-            try? await Task.sleep(for: .milliseconds(450))
-            withAnimation(.easeOut(duration: 0.3)) { ready = true }
-        }
-    }
-}
-
 private struct PauseButton: View {
     @Environment(ChatStore.self) private var store
     let recorder: AudioRecorder
@@ -90,7 +63,7 @@ private struct PauseButton: View {
             WKHaptics.click()
         } label: {
             Image(systemName: recorder.isPaused ? "mic.fill" : "pause.fill")
-                .foregroundStyle(recorder.isPaused ? Theme.accent : .white)
+                .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
         }
         .disabled(!recorder.isActive)
@@ -101,17 +74,21 @@ private struct PauseButton: View {
 
 private struct LiveContent: View {
     @Environment(ChatStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let processing = store.voicePhase == .transcribing
-        VStack(spacing: 0) {
-            LiveSendButton(processing: processing)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, -36)
-                .padding(.horizontal, -10)
+        let mode = store.voiceMode
+        VStack(spacing: 4) {
+            ZStack {
+                VoiceOrb(mode: mode) { [recorder = store.recorder] in recorder.level }
+                LiveSendButton(mode: mode)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, -22)
 
             if let prompt = store.voicePrompt {
-                Text("\(prompt.text)…")
+                Text(prompt.text)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(Theme.accent)
                     .lineLimit(1)
@@ -123,15 +100,16 @@ private struct LiveContent: View {
             ZStack {
                 if processing {
                     TranscribingLabel()
-                        .transition(.opacity.combined(with: .offset(y: 8)))
+                        .transition(.opacity)
                 } else {
                     RecordingStatus(recorder: store.recorder)
-                        .transition(.opacity.combined(with: .offset(y: -8)))
+                        .transition(.opacity)
                 }
             }
-            .frame(height: 34)
+            .frame(minHeight: 30)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: mode)
         }
-        .padding(.bottom, 2)
+        .padding(.bottom, 4)
     }
 }
 
@@ -145,33 +123,31 @@ private final class SwipeGuard {
 
 private struct LiveSendButton: View {
     @Environment(ChatStore.self) private var store
-    let processing: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let mode: VoiceMode
     @State private var swipe = SwipeGuard()
 
     var body: some View {
+        let processing = mode == .processing
         Button {
             guard !swipe.recentlySwiped else { return }
             store.finishVoice()
         } label: {
             ZStack {
-                VoiceBlob(mode: store.voiceMode, coreRatio: 0.5) { [recorder = store.recorder] in recorder.level }
-                ZStack {
-                    if processing {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 26, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .symbolEffect(.variableColor.iterative.dimInactiveLayers)
-                            .transition(.scale(scale: 0.3).combined(with: .opacity))
-                    } else {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 30, weight: .bold))
-                            .foregroundStyle(.white)
-                            .transition(.scale(scale: 0.3).combined(with: .opacity))
-                    }
+                if processing {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 56, height: 56)
+                        .glassBackground(Circle(), fill: Theme.raised)
+                        .transition(.opacity)
+                } else {
+                    MicCircle(size: 56, halo: false, icon: "arrow.up")
+                        .transition(.opacity)
                 }
-                .animation(.spring(response: 0.4, dampingFraction: 0.62), value: processing)
             }
-            .contentShape(Circle().scale(0.6))
+            .contentShape(Circle())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: mode)
         }
         .buttonStyle(PressableStyle(scale: 0.9))
         .simultaneousGesture(
@@ -179,47 +155,46 @@ private struct LiveSendButton: View {
                 .onChanged { [swipe] _ in swipe.lastMove = .now }
         )
         .doubleTapAction(isEnabled: store.recorder.isActive && !processing)
-        .allowsHitTesting(store.recorder.isActive && !processing)
-        .accessibilityLabel("Отправить")
+        .disabled(!store.recorder.isActive || processing)
+        .accessibilityLabel("Отправить запись")
+        .accessibilityHidden(processing)
     }
 }
 
 private struct RecordingStatus: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let recorder: AudioRecorder
 
     var body: some View {
         HStack(spacing: 6) {
-            ZStack {
-                if recorder.isPaused {
-                    Image(systemName: "pause.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Theme.fast)
-                        .transition(.scale.combined(with: .opacity))
-                } else {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 7))
-                        .foregroundStyle(Theme.danger)
-                        .symbolEffect(.pulse, isActive: recorder.isRecording)
-                        .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .frame(width: 10)
-            Text(timeString(recorder.elapsed))
-                .font(.system(.footnote, design: .rounded).weight(.semibold))
-                .monospacedDigit()
-                .contentTransition(.numericText())
+            Image(systemName: recorder.isPaused ? "pause.fill" : "mic.fill")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(recorder.isPaused ? Theme.secondaryText : Theme.accent)
+                .frame(width: 10)
+                .accessibilityHidden(true)
             Text(statusText)
-                .font(.footnote)
+                .font(.caption)
                 .foregroundStyle(Theme.secondaryText)
-                .contentTransition(.opacity)
+                .lineLimit(1)
+            if recorder.isActive {
+                Capsule()
+                    .fill(.white.opacity(0.18))
+                    .frame(width: 1, height: 10)
+                Text(timeString(recorder.elapsed))
+                    .font(.system(.caption, design: .monospaced).weight(.medium))
+                    .foregroundStyle(recorder.isPaused ? Theme.secondaryText : Theme.accent)
+                    .fixedSize()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+            }
         }
-        .animation(.snappy(duration: 0.3), value: recorder.elapsed)
-        .animation(.snappy(duration: 0.3), value: statusText)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: recorder.elapsed)
+        .accessibilityElement(children: .combine)
     }
 
     private var statusText: String {
-        if recorder.isPaused { return String(localized: "пауза") }
-        return recorder.heardSpeech ? String(localized: "слушаю") : String(localized: "говорите")
+        if recorder.isPaused { return String(localized: "Пауза") }
+        if !recorder.isRecording { return String(localized: "Включаю микрофон…") }
+        return recorder.heardSpeech ? String(localized: "Слушаю") : String(localized: "Говорите")
     }
 
     private func timeString(_ t: TimeInterval) -> String {
@@ -233,12 +208,15 @@ private struct TranscribingLabel: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            ShimmerText(text: String(localized: "Распознаю"), font: .system(size: 15, weight: .semibold, design: .rounded), base: .white.opacity(0.75))
+            Text("Распознаю речь")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
             Text(engineHint)
                 .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)
                 .lineLimit(1)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var engineHint: String {

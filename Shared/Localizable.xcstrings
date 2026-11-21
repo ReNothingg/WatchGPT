@@ -180,6 +180,7 @@
       }
     },
     "%@…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4930,6 +4931,7 @@
       }
     },
     "Ответ прервался" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6565,6 +6567,9 @@
           }
         }
       }
+    },
+    "Распознаю речь" : {
+
     },
     "Рассуждения" : {
       "extractionState" : "stale",
